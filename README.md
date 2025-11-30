@@ -2,6 +2,9 @@
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that enables AI agents to trade perpetual futures on [Jupiter Perpetuals](https://jup.ag/perps) (Solana).
 
+> **⚠️ DISCLAIMER**
+> This software is provided for educational and research purposes only. Trading perpetual futures involves substantial risk of loss and is not suitable for all investors. You are solely responsible for any trading decisions and losses incurred. The authors and contributors assume no liability for your use of this software. Use at your own risk with funds you can afford to lose.
+
 ## Features
 
 - **Market Data**: Real-time prices, 24h statistics, and historical OHLCV candles
