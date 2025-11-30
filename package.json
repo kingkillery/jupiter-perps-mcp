@@ -1,0 +1,39 @@
+{
+  "name": "jupiter-perps-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Jupiter Perps trading on Solana",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "start:remote": "node dist/index.js --remote"
+  },
+  "keywords": [
+    "mcp",
+    "jupiter",
+    "solana",
+    "perps",
+    "trading"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.29.0",
+    "@modelcontextprotocol/sdk": "^1.23.0",
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.95.8",
+    "@types/express": "^5.0.5",
+    "bn.js": "^5.2.1",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "technicalindicators": "^3.1.0"
+  },
+  "devDependencies": {
+    "@types/bn.js": "^5.2.0",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
