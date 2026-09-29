@@ -26,7 +26,7 @@ import {
   JLP_POOL_ACCOUNT_PUBKEY,
   JUPITER_PERPETUALS_PROGRAM_ID,
 } from "../utils/program.js";
-import { signAndSendTransaction } from "../utils/transactions.js";
+import { signAndSendTransaction, type TransactionSigner } from "../utils/transactions.js";
 import { findPositionByAssetAndSide } from "../utils/position.js";
 import { TOKENS, USDC_MINT_ADDRESS } from "../constants.js";
 import { PositionSide } from "../types.js";
@@ -197,7 +197,7 @@ async function constructClosePositionTransaction(
  */
 export async function closePosition(
   connection: Connection,
-  walletKeypair: Keypair,
+  walletKeypair: TransactionSigner,
   walletAddress: string,
   asset: string,
   side: PositionSide,

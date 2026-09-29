@@ -1,30 +1,22 @@
-/**
- * Transaction utilities for signing and sending transactions
- */
+import { Connection, Keypair, PublicKey, VersionedTransaction } from "@solana/web3.js";
 
-import { Connection, Keypair, VersionedTransaction } from "@solana/web3.js";
+export interface TransactionSigner {
+  publicKey: PublicKey;
+  signal?: AbortSignal;
+  signTransaction(transaction: VersionedTransaction): Promise<VersionedTransaction>;
+}
 
-/**
- * Sign and send a transaction
- * @param transaction Versioned transaction to send
- * @param connection Solana RPC connection
- * @param signer Keypair to sign the transaction
- * @returns Transaction signature
- */
+export function keypairSigner(keypair: Keypair, signal?: AbortSignal): TransactionSigner {
+  return {publicKey:keypair.publicKey,signal,async signTransaction(transaction) {
+    transaction.sign([keypair]); return transaction;
+  }};
+}
+
 export async function signAndSendTransaction(
-  transaction: VersionedTransaction,
-  connection: Connection,
-  signer: Keypair
+  transaction: VersionedTransaction, connection: Connection, signer: TransactionSigner
 ): Promise<string> {
-  // Sign the transaction
-  transaction.sign([signer]);
-
-  // Send the transaction
-  const signature = await connection.sendTransaction(transaction, {
-    preflightCommitment: "confirmed",
-  });
-
-  // Return signature immediately (matching original behavior)
-  // Confirmation is handled by Solana validators
-  return signature;
+  signer.signal?.throwIfAborted();
+  const signed=await signer.signTransaction(transaction);
+  signer.signal?.throwIfAborted();
+  return await connection.sendTransaction(signed,{preflightCommitment:"confirmed"});
 }

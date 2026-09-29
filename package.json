@@ -5,10 +5,11 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && esbuild web/app-source.js --bundle --platform=browser --format=esm --outfile=web/app.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "start:remote": "node dist/index.js --remote"
+    "start:remote": "node dist/index.js --remote",
+    "test:e2e": "npm run build && node scripts/e2e.mjs && node scripts/e2e-wallet.mjs && node scripts/e2e-entry.mjs"
   },
   "keywords": [
     "mcp",
@@ -25,6 +26,7 @@
     "@solana/spl-token": "^0.4.9",
     "@solana/web3.js": "^1.95.8",
     "@types/express": "^5.0.5",
+    "@wallet-standard/app": "^1.1.1",
     "bn.js": "^5.2.1",
     "bs58": "^6.0.0",
     "dotenv": "^16.4.7",
@@ -34,6 +36,14 @@
   "devDependencies": {
     "@types/bn.js": "^5.2.0",
     "@types/node": "^22.10.2",
+    "esbuild": "^0.28.2",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "jayson": "5.0.0",
+    "toml": "4.2.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

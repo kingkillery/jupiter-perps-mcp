@@ -1,0 +1,112 @@
+{
+  "name": "SOL intraday breakout/retest and failed-bounce",
+  "source_conversation": "6abb5f66-5cb4-83e8-9991-c4d23ef35938",
+  "status": "draft_not_armed",
+  "asset": "SOL",
+  "quote_currency": "USD",
+  "confirmation_timeframe": "15m",
+  "context_timeframe": "1h",
+  "risk": {
+    "max_planned_loss_usd": 5,
+    "includes_fees_and_slippage": true,
+    "leverage_preference": "lowest_available",
+    "minimum_supported_leverage": 1.1,
+    "max_leverage": 7,
+    "cost_reserve_usd": null
+  },
+  "execution": {
+    "wallet": "Jupiter browser extension",
+    "require_wallet_approval_each_transaction": true,
+    "live_execution_enabled": false,
+    "auto_entry": false,
+    "protective_stop_required": true,
+    "stop_on_touch_not_candle_close": true,
+    "max_slippage_bps": 200,
+    "native_protective_tools_available": true,
+    "entry_enabled": false,
+    "protective_order_submission": "Explicit wallet approval; native triggers then execute without another popup",
+    "risk_controls_available": true,
+    "entry_review_default": "locked",
+    "entry_preview_expiry_seconds": 60,
+    "atomic_stop_and_three_targets_required": true
+  },
+  "long": {
+    "conditions": [
+      "Completed 15-minute candle closes above 119.20",
+      "A later pullback retests 119.00–119.20",
+      "Retest holds and turns upward; manual confirmation required",
+      "Retest low must allow a structural stop at 118.60"
+    ],
+    "entry_reference": 119.2,
+    "retest_zone": [
+      119,
+      119.2
+    ],
+    "stop": 118.6,
+    "targets": [
+      119.9,
+      120.6,
+      121
+    ],
+    "target_fractions": [
+      0.3333333333333333,
+      0.3333333333333333,
+      0.3333333333333333
+    ],
+    "skip_if": "No retest or price reaches 119.80–120 before entry",
+    "gross_r_if_all_targets_fill": 2.1666666666666665
+  },
+  "short": {
+    "conditions": [
+      "Price tests 119.00–119.20 and fails to sustain it",
+      "Completed 15-minute candle closes below 118.60",
+      "A later rebound to 118.65–118.80 stalls and turns down; manual confirmation required",
+      "Rejection high must allow a structural stop at 119.30"
+    ],
+    "entry_reference": 118.7,
+    "retest_zone": [
+      118.65,
+      118.8
+    ],
+    "stop": 119.3,
+    "targets": [
+      117.9,
+      117.1,
+      116.4
+    ],
+    "target_fractions": [
+      0.3333333333333333,
+      0.3333333333333333,
+      0.3333333333333333
+    ],
+    "skip_if": "Price reaches 117.90–118 without the failed rebound entry",
+    "gross_r_if_all_targets_fill": 2.611111111111111
+  },
+  "sizing": {
+    "formula": "units = (5 - estimated_total_costs_and_execution_allowance) / abs(actual_entry - stop)",
+    "price_only_max_units_before_costs": 8.333333333333334,
+    "order_size": null,
+    "collateral_usdc": null,
+    "leverage": null
+  },
+  "blockers": [
+    "Chart levels need fresh market validation; they are not live signals",
+    "Fees and an execution allowance must fit within the $5 planned loss budget",
+    "Configured 200 bps slippage is wider than the approximately 50 bps stop distance",
+    "Retest hold/turn confirmation remains discretionary",
+    "Native protection tools require verification against the connected wallet and live API before a strategy is armed",
+    "Long USDC-to-SOL conversion remains blocked until its transaction route is validated",
+    "Short entries require the returned native transaction to include all three exact-third targets and the full stop; current API compatibility is not established"
+  ],
+  "no_entry_when": [
+    "Neither confirmation sequence is complete",
+    "Choppy movement without a completed setup",
+    "Price reaches targets before the entry develops"
+  ],
+  "notes": [
+    "Targets split the original position equally; rewards are not additive",
+    "Stops cannot guarantee a maximum realized loss",
+    "No measured win rate or validated edge is claimed",
+    "No actual order is created from the reference entry levels"
+  ]
+}

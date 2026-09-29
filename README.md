@@ -1,3 +1,5 @@
+> **Local setup:** Browser-wallet mode, native protective tools, saved SOL plan, and verification limits are documented in [SETUP.md](./SETUP.md). That file takes precedence over the upstream private-key instructions below.
+
 # Jupiter Perps MCP Server
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that enables AI agents to trade perpetual futures on [Jupiter Perpetuals](https://jup.ag/perps) (Solana).
@@ -40,7 +42,7 @@ This means large trades don't suffer from order book depth issues, but oracle pr
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - A Solana wallet with USDC for trading
 - Wallet private key (base58 encoded)
 
@@ -189,3 +191,16 @@ curl http://localhost:3000/health
 ## License
 
 MIT
+
+## Local defensive changes
+
+- Node.js 22 or newer is required by the pinned security updates.
+- Dependency overrides select jayson 5.0.0 and toml 4.2.0. The lockfile is retained for repeatable installs.
+- bigint-buffer 1.1.5 has no upstream patched release for GHSA-3gc7-fjrx-p6mg. The entry point loads its bundled pure-JavaScript implementation before importing the server, bypassing the native addon. Startup fails if the reviewed version changes or the vulnerable entry point was already loaded. Always launch dist/index.js, not dist/server.js.
+- HTTP listens only on 127.0.0.1. Requests must use a matching localhost or 127.0.0.1 Host header and must not include an Origin header. This endpoint is intended for native MCP clients, not direct browser requests. JSON bodies are limited to 64 KiB.
+- Each HTTP request gets a separate MCP protocol instance, preventing overlapping requests from sharing connection state.
+- Invalid or missing wallet keys prevent startup.
+
+Verification: run npm run test:e2e. These are end-to-end checks against the built HTTP server with an ephemeral unfunded wallet and external API fixtures. They cover health, MCP handshake, overlapping requests, input rejection, HTTP guards, and absence of native bigint loading. No unit tests or trades are run. Live trading and live upstream API compatibility remain unverified.
+
+Latest audit: 3 high findings remain in bigint-buffer and its two parent packages. They represent one upstream advisory; the local mitigation does not remove npm's version-based alerts. See https://github.com/advisories/GHSA-3gc7-fjrx-p6mg.

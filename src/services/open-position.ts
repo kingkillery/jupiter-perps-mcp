@@ -30,7 +30,7 @@ import {
   JLP_POOL_ACCOUNT_PUBKEY,
   JUPITER_PERPETUALS_PROGRAM_ID,
 } from "../utils/program.js";
-import { signAndSendTransaction } from "../utils/transactions.js";
+import { signAndSendTransaction, type TransactionSigner } from "../utils/transactions.js";
 import { getTokenInfo, USDC_MINT_ADDRESS } from "../constants.js";
 import { PositionSide } from "../types.js";
 
@@ -253,7 +253,7 @@ async function constructOpenPositionTransaction(
  */
 export async function openPosition(
   connection: Connection,
-  walletKeypair: Keypair,
+  walletKeypair: TransactionSigner,
   asset: string,
   side: PositionSide,
   collateralAmount: number,

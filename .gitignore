@@ -53,5 +53,7 @@ Thumbs.db
 *.temp
 .cache/
 
-package-lock.json
 .claude/
+# Local server state and browser bundle
+.runtime/
+web/app.js
