@@ -12,7 +12,8 @@
     "test:e2e": "npm run build && node scripts/e2e.mjs && node scripts/e2e-wallet.mjs && node scripts/e2e-entry.mjs",
     "setup:kronos": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-kronos.ps1",
     "test:e2e:kronos": "npm run build && node scripts/e2e-kronos.mjs",
-    "test:e2e:candidates": "npm run build && node scripts/e2e-candidates.mjs"
+    "test:e2e:candidates": "npm run build && node scripts/e2e-candidates.mjs",
+    "test:e2e:history": "npm run build && node scripts/run-candidate-history.mjs"
   },
   "keywords": [
     "mcp",

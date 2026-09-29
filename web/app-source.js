@@ -248,6 +248,13 @@ api('kronos/evaluation/latest').then(report=>{
 
 
 let candidateController=null,candidateScan=null;
+ $('candidate-key-form').onsubmit=async event=>{
+  event.preventDefault();const form=event.currentTarget,field=$('candidate-key'),button=form.querySelector('button');
+  button.disabled=true;$('candidate-key-message').textContent='Saving on this computer…';
+  try {await api('candidates/key',{key:field.value.trim()});field.value='';$('candidate-provider').textContent='Jev · Key stored';$('candidate-key-message').textContent='Key saved locally. Run Scan candidates to verify it with OpenRouter.';}
+  catch(e){field.value='';$('candidate-key-message').textContent=e.message;}
+  finally{button.disabled=false;}
+ };
 const candidateTime=t=>new Date(t).toLocaleString();
 function candidateControls(){
  $('candidate-scan').disabled=!!candidateController;
@@ -317,3 +324,13 @@ api('candidates/status').then(status=>{
  $('candidate-provider').textContent=status.configured?'Jev · Key stored':'Jev · Key needed';
 }).catch(e=>{$('candidate-provider').textContent='Jev · Offline';$('candidate-message').textContent=e.message;});
 api('candidates/latest').then(scan=>{if(scan&&!candidateController)showCandidate(scan);else if(!scan)$('candidate-message').textContent='No scan yet. Click Scan candidates.';}).catch(e=>{$('candidate-message').textContent=e.message;});
+api('candidates/history/latest').then(report=>{
+ if(!report?.rows?.length)return;
+ $('candidate-history').hidden=false;
+ const summary=report.summary;
+ $('candidate-history-summary').textContent=`${report.windows} decisions · ${summary.review_routed} routed for review · ${summary.sol_direction_calls} SOL direction calls${summary.sol_direction_calls?` · ${summary.sol_direction_matched} matched the next eight-candle move`:''}.`;
+ const table=document.createElement('table'),head=document.createElement('tr');
+ for(const label of ['Decision (UTC)','SOL close','Jev choice','Next 2h SOL move']){const cell=document.createElement('th');cell.textContent=label;head.append(cell);}table.append(head);
+ for(const row of report.rows){const line=document.createElement('tr');for(const value of [new Date(row.as_of).toISOString().slice(0,16).replace('T',' '),money(row.origin_close),row.decision.id.replaceAll('_',' '),row.future_change_pct.toFixed(2)+'%']){const cell=document.createElement('td');cell.textContent=value;line.append(cell);}table.append(line);}
+ $('candidate-history-rows').replaceChildren(table);
+}).catch(()=>{});

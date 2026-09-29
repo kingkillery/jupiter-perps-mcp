@@ -1,7 +1,9 @@
 import type { CandidateInbox } from "../services/candidate-inbox.js";
+import { saveOpenRouterKey } from "../services/candidate-ranking.js";
 import type { KronosService } from "../services/kronos.js";
 import type { EntryControls } from "../services/entry-controls.js";
 import { randomBytes, createPublicKey, verify } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import type { Express, Request } from "express";
@@ -105,9 +107,17 @@ export class BrowserWalletBridge {
       next();
     });
     app.get("/wallet/candidates/status", (_req,res) => res.json(candidateInbox.status()));
+    app.post("/wallet/candidates/key", async (req,res) => {
+      try { res.json(await saveOpenRouterKey(req.body?.key)); }
+      catch(error) { res.status(400).json({error:error instanceof Error?error.message:"Could not save the key"}); }
+    });
     app.get("/wallet/candidates/latest", async (_req,res) => {
       try {res.json(await candidateInbox.latest());}
       catch {res.status(500).json({error:"Could not read the candidate inbox"});}
+    });
+    app.get("/wallet/candidates/history/latest", async (_req,res) => {
+      try { res.json(JSON.parse(await readFile(new URL(process.env.NODE_ENV==="test"?"../../.runtime/candidate-history-e2e/latest.json":"../../.runtime/candidate-history/latest.json",import.meta.url),"utf8"))); }
+      catch(error:any) { res.status(error.code==="ENOENT"?404:500).json({error:"No historical replay report is available"}); }
     });
     app.post("/wallet/candidates/outcome", async (_req,res) => {
       try {res.json(await candidateInbox.checkOutcome());}

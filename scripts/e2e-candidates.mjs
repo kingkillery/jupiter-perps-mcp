@@ -21,6 +21,8 @@ try{
  assert.equal((await fetch(base+'/wallet/candidates/latest')).status,401);
  const page=await fetch(base+'/wallet'),html=await page.text();
  assert.match(html,/id="candidate-scan"/);assert.match(html,/id="candidate-list"/);
+ assert.match(html,/id="candidate-history"/);
+ assert.match(html,/id="candidate-key"[^>]*type="password"/);
  const cookie=page.headers.get('set-cookie').split(';')[0];
  const request=async(path,body,headers={})=>{
   const response=await fetch(base+'/wallet/candidates/'+path,{method:body===undefined?'GET':'POST',
@@ -29,6 +31,12 @@ try{
   return {status:response.status,body:await response.json()};
  };
  assert.equal((await request('status')).body.configured,true);
+ assert.equal((await request('history/latest')).status,404);
+ assert.equal((await request('key',{key:'sk-or-v1-'+('a'.repeat(40))},{Origin:'https://evil.invalid'})).status,403);
+ assert.equal((await request('key',{key:'short'})).status,400);
+ const savedKey=await request('key',{key:'sk-or-v1-'+('a'.repeat(40))});
+ assert.deepEqual(savedKey,{status:200,body:{configured:true}});
+ assert(!JSON.stringify(savedKey).includes('sk-or-v1-'));
  assert.equal((await request('scan',{}, {Origin:'https://evil.invalid'})).status,403);
  assert.equal((await request('scan',{wallet_key:'x'})).status,400);
  const scanPromise=request('scan',{});

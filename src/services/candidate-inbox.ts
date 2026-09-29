@@ -6,17 +6,10 @@ import type { Candle, MarketState } from "../types.js";
 import { fetchKrakenCandles } from "./candle-feed.js";
 import { getMarketSnapshot } from "./market.js";
 import type { KronosService } from "./kronos.js";
+import { candidateDefinitions, rankCandidateState } from "./candidate-ranking.js";
 
 const archiveRoot = new URL(process.env.NODE_ENV === "test" ? "../../.runtime/candidate-inbox-e2e/" : "../../.runtime/candidate-inbox/", import.meta.url);
 const latestPath = new URL("latest.json", archiveRoot);
-const ids = ["sol_long", "sol_short", "eth_watch", "btc_watch", "none"] as const;
-type CandidateId = typeof ids[number];
-const candidates = [
-  {id:"sol_long",asset:"SOL",side:"long",label:"SOL breakout and retest",execution_scope:"saved_SOL_plan",description:"Only after the saved 15-minute breakout, retest and structural stop are verified. The long conversion route is presently blocked."},
-  {id:"sol_short",asset:"SOL",side:"short",label:"SOL failed bounce",execution_scope:"saved_SOL_plan",description:"Only after a rejection, completed breakdown and failed rebound in the saved SOL plan."},
-  {id:"eth_watch",asset:"ETH",side:null,label:"ETH market watch",execution_scope:"analysis_only",description:"Market analysis candidate; there is no configured ETH entry plan."},
-  {id:"btc_watch",asset:"BTC",side:null,label:"BTC market watch",execution_scope:"analysis_only",description:"Market analysis candidate; there is no configured BTC entry plan."}
-] as const;
 type Lane = {asset:string;interval:string;source:string;last_completed_time:number;last_completed_close:number;change_8_bars_pct:number;rsi_14:number;ema_21:number;atr_14:number;recent_candles:Candle[];market:MarketState|null};
 function lane(asset: "SOL"|"ETH"|"BTC", interval:"15m"|"1h", bars:Candle[], source:string, market:MarketState|null):Lane {
   const closes=bars.map(c=>c.close);
@@ -27,21 +20,6 @@ function lane(asset: "SOL"|"ETH"|"BTC", interval:"15m"|"1h", bars:Candle[], sour
   return {asset,interval,source,last_completed_time:bars.at(-1)!.time,last_completed_close:closes.at(-1)!,
     change_8_bars_pct:(closes.at(-1)!/closes.at(-9)!-1)*100,
     rsi_14:rsi!,ema_21:ema!,atr_14:atr!,recent_candles:bars.slice(-12),market};
-}
-function choice(answer:any) {
-  if (!answer || answer.type!=="choice" || !ids.includes(answer.choice) || typeof answer.confidence!=="number" || !Number.isFinite(answer.confidence) || answer.confidence<0 || answer.confidence>1) throw new Error("Jev returned an invalid choice");
-  const probabilities:Record<CandidateId,number> = {} as Record<CandidateId,number>;
-  for (const id of ids) {
-    const p=answer.probabilities?.[id];
-    if(typeof p!=="number"||!Number.isFinite(p)||p<0||p>1) throw new Error("Jev returned an invalid candidate distribution");
-    probabilities[id]=p;
-  }
-  if(Math.abs(Object.values(probabilities).reduce((a,b)=>a+b,0)-1)>0.02) throw new Error("Jev returned an invalid candidate distribution");
-  return {id:answer.choice as CandidateId,confidence:answer.confidence,probabilities};
-}
-function booleanAnswer(answer:any) {
-  if(!answer || answer.type!=="noul" || typeof answer.noul!=="number" || !Number.isFinite(answer.noul) || answer.noul<0 || answer.noul>1) throw new Error("Jev returned an invalid evidence check");
-  return answer.noul as number;
 }
 export const CANDIDATE_TOOLS: Tool[] = [
  {name:"scan_trade_candidates",description:"Build a read-only market snapshot and ask Jev to rank SOL plan and ETH/BTC watch candidates. Stores the complete decision locally. Does not prepare or submit transactions.",inputSchema:{type:"object",properties:{},additionalProperties:false}},
@@ -117,7 +95,7 @@ export class CandidateInbox {
       const expires=sol?sol.last_completed_time+1800000:generated+60000;
       const snapshot={generated_at:generated,expires_at:expires,lanes,forecast,evaluation,warnings,
         strategy:{asset:"SOL",status:this.strategy.status,long:this.strategy.long,short:this.strategy.short,risk:this.strategy.risk},
-        candidates,wallet_connected:this.walletConnected()};
+        candidates:candidateDefinitions,wallet_connected:this.walletConnected()};
       const key=process.env.OPENROUTER_API_KEY;
       let decision:any=null,ranked:any[]=[],status="unconfigured";
       if(key && sol && Date.now()<expires){
@@ -125,24 +103,10 @@ export class CandidateInbox {
         const state={time:generated,expires_at:expires,lanes:lanes.map(({recent_candles,...summary})=>({...summary,recent_candles:recent_candles.slice(-6)})),
           kronos:forecast?{last_close:forecast.last_completed_close,end_change_pct:forecast.end_change_pct,generated_at:forecast.generated_at,method:forecast.method}:null,
           evaluation:evaluation?{holdout:evaluation.holdout,baseline:evaluation.baseline,limitations:evaluation.limitations}:null,
-          plan:{long:this.strategy.long,short:this.strategy.short},candidates:candidates.map(c=>({id:c.id,description:c.description})),warnings};
-        const questions={
-          best_candidate:{type:"choice",instructions:"Which single candidate deserves the next human review based on this evidence? Choose none when the setup is unclear, data are stale, or signals conflict. This is a review routing judgment, not a trading-profit forecast.",criteria:{
-            sol_long:"Saved SOL long breakout and retest; examine only if completed structure supports it.",
-            sol_short:"Saved SOL short failed bounce; examine only if completed structure supports it.",
-            eth_watch:"ETH deserves market research; no entry plan or execution route exists.",
-            btc_watch:"BTC deserves market research; no entry plan or execution route exists.",
-            none:"No candidate has enough current, consistent evidence for deeper review."
-          }},
-          evidence_consistent:{type:"noul",instructions:"Do the available completed candles, market summary and Kronos scenario give sufficiently consistent, current evidence to warrant human review of the selected candidate? This is not a prediction of profit."}
-        };
-        const response=await fetch("https://openrouter.ai/api/v1/systemone",{method:"POST",headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},body:JSON.stringify({model:"jev-1.13",state,questions}),signal:AbortSignal.any([signal,AbortSignal.timeout(20000)])});
-        if(!response.ok)throw new Error(response.status===401?"OpenRouter rejected the saved API key (HTTP 401). Re-enter a valid key in the local masked prompt.":"Jev request failed (HTTP "+response.status+"). Check OpenRouter configuration and balance.");
-        const raw=await response.json();
-        const answer=choice(raw?.answers?.best_candidate),consistent=booleanAnswer(raw?.answers?.evidence_consistent);
-        decision={...answer,evidence_consistent:consistent,model:raw.model,provider:"openrouter",usage:raw.usage??null};
-        ranked=candidates.map(c=>({...c,selection_share:answer.probabilities[c.id]})).sort((a,b)=>b.selection_share-a.selection_share);
-        status=answer.id==="none" || consistent<0.5 || answer.confidence<0.5?"watch":"review_candidates";
+          plan:{long:this.strategy.long,short:this.strategy.short},candidates:candidateDefinitions.map(c=>({id:c.id,description:c.description})),warnings};
+        decision=await rankCandidateState(state,signal);
+        ranked=candidateDefinitions.map(c=>({...c,selection_share:decision.probabilities[c.id]})).sort((a,b)=>b.selection_share-a.selection_share);
+        status=decision.id==="none" || decision.evidence_consistent<0.5 || decision.confidence<0.5?"watch":"review_candidates";
       }else if(!key)warnings.push("OpenRouter key is not configured; candidate states collected without model ranking");
       else warnings.push("Fresh completed SOL candles unavailable; Jev ranking skipped");
       signal.throwIfAborted();

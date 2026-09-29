@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { fetchKrakenCandles } from "./candle-feed.js";
+import type { Candle } from "../types.js";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const python = join(root, ".runtime/kronos-venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
@@ -95,6 +96,26 @@ export class KronosService {
   }
 
   latestEvaluation() { return latestEvaluation(); }
+
+  async forecastHistorical(contexts:Candle[][], signal = new AbortController().signal) {
+    if(!this.status().ready)throw new Error("Install Kronos before replaying history");
+    if(this.busy)throw new Error("Kronos is busy");
+    if(!Array.isArray(contexts)||contexts.length<1||contexts.length>12||contexts.some(c=>c.length!==LOOKBACK))throw new Error("Historical forecast requires 1–12 contexts of 128 candles");
+    for(const context of contexts) for(let i=1;i<context.length;i++) if(context[i].time!==context[i-1].time+STEPS["15m"])throw new Error("Historical candles are not contiguous");
+    this.busy=true;
+    try{
+      const output=await this.infer({requests:contexts.map(candles=>({candles,horizon:8,interval_ms:STEPS["15m"]}))},signal,480000);
+      if(!Array.isArray(output?.results)||output.results.length!==contexts.length)throw new Error("Incomplete historical Kronos forecasts");
+      return output.results.map((item:any,index:number)=>{
+        const forecast=item?.forecast;
+        if(!Array.isArray(forecast)||forecast.length!==8)throw new Error("Incomplete historical Kronos forecast");
+        return forecast.map((point:any,n:number)=>{
+          if(point?.time!==contexts[index].at(-1)!.time+(n+1)*STEPS["15m"]||!Number.isFinite(point.close)||point.close<=0)throw new Error("Invalid historical Kronos forecast");
+          return {time:point.time,close:point.close};
+        });
+      });
+    }finally{this.busy=false;}
+  }
 
   async evaluate(args: unknown, signal = new AbortController().signal) {
     signal.throwIfAborted();
