@@ -104,3 +104,76 @@ $('entry-review').onclick=async()=>{
 };
 setInterval(refreshEntryButtons,1000);
 api('controls').then(updateEntryStatus).catch(e=>{$('entry-message').textContent=e.message;});
+
+
+// Forecasts have no connection to entry controls or wallet signing.
+let forecastController=null,forecastVersion=0,kronosReady=false;
+function forecastButtons(){
+ $('kronos-generate').disabled=!kronosReady||!!forecastController;
+ $('kronos-cancel').hidden=!forecastController;
+}
+async function kronosStatus(){
+ try{
+  const state=await api('kronos/status');kronosReady=state.ready;
+  if(!forecastController)$('kronos-message').textContent=state.ready?'Kronos-mini ready on CPU. Generate when you want a fresh scenario.':'Local model unavailable. Run npm run setup:kronos on the host computer.';
+ }catch(e){$('kronos-message').textContent=e.message;}
+ forecastButtons();
+}
+function invalidateForecast(){
+ forecastVersion++;forecastController?.abort();$('kronos-result').hidden=true;
+}
+$('kronos-form').addEventListener('input',()=>{invalidateForecast();$('kronos-message').textContent='Settings changed. Generate a new forecast.';});
+$('kronos-cancel').onclick=()=>{invalidateForecast();$('kronos-message').textContent='Forecast cancelled.';};
+function drawForecast(result){
+ const svg=$('kronos-chart');svg.replaceChildren();
+ const node=(tag,attrs={},text)=>{
+  const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const [key,value]of Object.entries(attrs))el.setAttribute(key,String(value));
+  if(text!==undefined)el.textContent=text;svg.append(el);return el;
+ };
+ node('title',{id:'kronos-chart-title'},result.asset+' completed closes and Kronos mean forecast');
+ const points=[...result.history,...result.forecast],prices=points.map(p=>p.close);
+ const minimum=Math.min(...prices),maximum=Math.max(...prices),padding=Math.max((maximum-minimum)*.12,maximum*.001);
+ const lo=minimum-padding,hi=maximum+padding;
+ const x=i=>80+i/(points.length-1)*780,y=p=>230-(p-lo)/(hi-lo)*205;
+ for(let i=0;i<4;i++){
+  const value=lo+(hi-lo)*i/3;
+  node('line',{x1:80,x2:860,y1:y(value),y2:y(value),class:'forecast-grid'});
+  node('text',{x:72,y:y(value)+4,'text-anchor':'end',class:'forecast-label'},money(value));
+ }
+ const historyEnd=result.history.length-1;
+ node('line',{x1:x(historyEnd),x2:x(historyEnd),y1:20,y2:230,class:'forecast-boundary'});
+ const path=(list,start)=>list.map((p,i)=>(i?'L':'M')+x(start+i).toFixed(2)+','+y(p.close).toFixed(2)).join(' ');
+ node('path',{d:path(result.history,0),class:'forecast-history'});
+ node('path',{d:path([result.history.at(-1),...result.forecast],historyEnd),class:'forecast-predicted'});
+ for(const [i,anchor]of [[0,'start'],[historyEnd,'middle'],[points.length-1,'end']]){
+  node('text',{x:x(i),y:256,'text-anchor':anchor,class:'forecast-label'},new Date(points[i].time).toISOString().slice(11,16)+' UTC');
+ }
+}
+function showForecast(result){
+ $('kronos-result').hidden=false;
+ $('kronos-summary').textContent=result.asset+' · '+result.interval+' · '+result.horizon+' forecast candles';
+ $('kronos-change').textContent=(result.end_change_pct>=0?'+':'')+result.end_change_pct.toFixed(2)+'% at path end';
+ $('kronos-details').textContent=result.candle_source+' · Kronos-mini · Generated '+new Date(result.generated_at).toLocaleString()+'. '+result.method+' Turnover input is estimated from volume and mean OHLC. Candle timestamps mark each interval’s start.';
+ $('kronos-prices').replaceChildren();
+ for(const p of result.forecast){
+  const tr=document.createElement('tr'),time=document.createElement('td'),price=document.createElement('td');
+  time.textContent=new Date(p.time).toISOString().replace('T',' ').slice(0,16);price.textContent=money(p.close);
+  tr.append(time,price);$('kronos-prices').append(tr);
+ }
+ drawForecast(result);
+ $('kronos-message').textContent=result.cached?'Showing the same recent candle forecast from the one-minute cache.':'Forecast ready. Entry reviews and wallet approvals are unchanged.';
+}
+$('kronos-form').onsubmit=async event=>{
+ event.preventDefault();if(forecastController||!kronosReady)return;
+ invalidateForecast();const version=forecastVersion,controller=new AbortController();forecastController=controller;forecastButtons();
+ $('kronos-message').textContent='Reading completed candles and running Kronos locally… This can take up to two minutes.';
+ try{
+  const response=await fetch('/wallet/kronos/forecast',{method:'POST',headers:{'Content-Type':'application/json','X-Wallet-Bridge':'1'},
+   body:JSON.stringify({asset:$('kronos-asset').value,interval:$('kronos-interval').value,horizon:Number($('kronos-horizon').value)}),signal:controller.signal});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'Forecast failed');
+  if(version===forecastVersion)showForecast(result);
+ }catch(e){if(version===forecastVersion)$('kronos-message').textContent=e.name==='AbortError'?'Forecast cancelled.':e.message;}
+ finally{if(forecastController===controller)forecastController=null;forecastButtons();}
+};
+void kronosStatus();

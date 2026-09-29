@@ -68,3 +68,26 @@ The public `get_candles` and indicator tools use Kraken's SOL/USD, ETH/USD, and 
 The entry transaction validator accepts only a native, direct-USDC SOL short with one exact entry, a whole-position stop, and three exact-third take-profit requests in the same transaction. It rejects unexpected programs, wallets, keeper changes, canonical account changes, collateral amounts, size, fill bounds, fees, leverage, destinations, or missing requests. The official Jupiter v2 entry schema does not document partial target size fields, and an unfunded wallet cannot produce a live prepared transaction for compatibility testing. If the API does not encode all four native requests exactly, entry approval stays blocked. Long entries remain blocked pending validation of the USDC-to-SOL conversion route. No live orders were submitted.
 
 Kraken API documentation: https://docs.kraken.com/api-reference/market-data/get-ohlc-data
+## Local Kronos forecasts
+
+The wallet page includes **Kronos · Price scenario**. Choose an asset, candle interval and horizon, then click **Generate forecast**. Wallet connection is not required for forecasting. The solid chart line shows completed closes; the dashed line is the mean of three model-sampled closing-price paths. Forecast prices and their candle-start timestamps are available below the chart.
+
+Install once on Windows with Python 3.13 and Git available:
+
+```powershell
+npm run setup:kronos
+npm run build
+```
+
+Setup downloads the official [Kronos](https://github.com/shiyu-coder/Kronos) source, Kronos-mini weights and 2k tokenizer at the exact revisions in `kronos/manifest.json`. The source, CPU-only Python environment and weights stay under ignored `.runtime/`. Startup does not download anything. Forecasts run offline after public Kraken candles are fetched. The worker inherits no wallet keys or API tokens.
+
+MCP tool: `get_kronos_forecast`, optional arguments:
+- `asset`: SOL (default), ETH or BTC.
+- `interval`: 5m, 15m (default) or 1h.
+- `horizon`: 1–24 candles, default 8.
+
+Each request uses 128 completed Kraken spot USD candles, excludes the unfinished row, and rejects invalid, discontinuous or stale data. Turnover is estimated from base volume times mean OHLC. Inference uses CPU, three sampled paths, seed 42 and a two-minute timeout. One job can run at a time; cancellation stops the child process. Identical inputs can reuse a one-minute cache. The interface shows the generation time and source. Candle timestamps are interval start times, in milliseconds in the MCP response.
+
+This is an experimental closing-price scenario, not a calibrated confidence band or validated SOL trading signal. No backtested profitability claim is made. It does not arm entries, alter the saved strategy, or prepare/sign/submit orders. Spot model outputs are not Jupiter execution quotes.
+
+After installing the runtime, run `npm run test:e2e:kronos` for a full server/MCP test using the actual installed model and fixture market data. `npm run test:e2e` runs the existing wallet and trading-safety scenarios without requiring a model install. No unit tests are used.

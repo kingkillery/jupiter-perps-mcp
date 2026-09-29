@@ -1,3 +1,4 @@
+import type { KronosService } from "../services/kronos.js";
 import type { EntryControls } from "../services/entry-controls.js";
 import { randomBytes, createPublicKey, verify } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -68,7 +69,7 @@ export class BrowserWalletBridge {
     };
   }
 
-  mount(app: Express, port: number, entries: EntryControls) {
+  mount(app: Express, port: number, entries: EntryControls, kronos: KronosService) {
     const origin = `http://127.0.0.1:${port}`;
     const webRoot = fileURLToPath(new URL("../../web/", import.meta.url));
     app.use("/wallet", (req, res, next) => {
@@ -101,6 +102,18 @@ export class BrowserWalletBridge {
       if (!lastUsed || Date.now()-lastUsed>600_000) { res.status(401).json({error:"Reload the wallet page"}); return; }
       this.sessions.set(token,Date.now());
       next();
+    });
+    app.get("/wallet/kronos/status", (_req,res) => res.json(kronos.status()));
+    app.post("/wallet/kronos/forecast", async (req,res) => {
+      const controller = new AbortController();
+      const cancel = () => { if (!res.writableEnded) controller.abort(); };
+      res.on("close", cancel);
+      try {
+        const result = await kronos.forecast(req.body, controller.signal);
+        if (!res.destroyed) res.json(result);
+      } catch (error) {
+        if (!res.destroyed) res.status(400).json({error:error instanceof Error ? error.message : "Forecast failed"});
+      } finally { res.off("close", cancel); }
     });
     app.get("/wallet/status", (req,res) => {
       const address = this.address;

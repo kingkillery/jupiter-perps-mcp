@@ -1,3 +1,4 @@
+import { KronosService, KRONOS_TOOL } from "./services/kronos.js";
 import { EntryControls, ENTRY_TOOLS } from "./services/entry-controls.js";
 import { PROTECTION_TOOLS, runProtectionTool } from "./services/protection.js";
 import { BrowserWalletBridge } from "./wallet/browser-bridge.js";
@@ -38,6 +39,7 @@ dotenv.config();
 const WALLET_MODE = process.env.WALLET_MODE || "keypair";
 const WALLET_PRIVATE_KEY = process.env.WALLET_PRIVATE_KEY;
 const browserWallet = new BrowserWalletBridge();
+const kronos = new KronosService();
 const strategy = JSON.parse(readFileSync(new URL("../strategy.json", import.meta.url), "utf8"));
 const tradingBlocker = "Direct entry is disabled. Use preview_strategy_entry and the local wallet risk controls; only validated entries with atomic protection may request approval.";
 const RPC_URL = process.env.RPC_URL || "https://api.mainnet-beta.solana.com";
@@ -125,6 +127,7 @@ if (WALLET_MODE === "keypair" && WALLET_PRIVATE_KEY) {
 
 // Tool definitions
 const TOOLS: Tool[] = [
+  KRONOS_TOOL,
   ...PROTECTION_TOOLS,
   ...ENTRY_TOOLS,
   { name: "get_strategy_plan", description: "Read the configured SOL intraday plan, risk cap, target split, and live-execution blockers. Does not place orders.", inputSchema: { type: "object", properties: {} } },
@@ -515,6 +518,10 @@ function createServer(): Server {
     const { name, arguments: args } = request.params;
 
     try {
+      if (name === "get_kronos_forecast") {
+        const result = await kronos.forecast(args, extra.signal);
+        return {content:[{type:"text",text:JSON.stringify(result,null,2)}]};
+      }
       if (name === "preview_strategy_entry") {
         const result = await entries.preview(args, extra.signal);
         return {content:[{type:"text",text:JSON.stringify(result,null,2)}]};
@@ -628,7 +635,7 @@ async function startHttpServer() {
     next();
   });
   app.use(express.json({ limit: "64kb" }));
-  if (WALLET_MODE === "browser") browserWallet.mount(app, MCP_PORT, entries);
+  if (WALLET_MODE === "browser") browserWallet.mount(app, MCP_PORT, entries, kronos);
 
   // Health check endpoint
   app.get("/health", (req, res) => {
