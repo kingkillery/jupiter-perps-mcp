@@ -14,3 +14,16 @@ Use the already archived 2,880 Coinbase SOL-USD 15-minute candles from 2026-08-1
 For each candidate, record raw eight-point MAE and MAE after the fixed half-strength transformation `origin + 0.5*(forecast-origin)`. Compare both with unchanged-origin-price MAE on precisely the same points. Preserve every predicted point, outcome, model revision, source hash, and trial count. If any candidate looks favorable, it remains a candidate for the previously specified **prospective 96-window** test; do not promote it or reselect from the old holdout. Do not train weights from this short dataset. Keep the Modal job ephemeral and bounded to one GPU and 15 minutes.
 
 Modal documentation: https://modal.com/docs/guide/gpu
+
+## Result recorded after execution
+
+The ephemeral [Modal run](https://modal.com/apps/pkkidking/main/ap-7lM5AbAgq8W0pQUMOpYoeF) completed on one NVIDIA L4. It produced the 48 declared forecasts and stopped. The local ignored archive is `.runtime/kronos-modal-tuning/latest.json`. `node scripts/validate-kronos-modal-tuning.mjs` independently matched its source hash, all decision/outcome timestamps, trial count, and every reported MAE.
+
+| Sampling setting | Raw MAE | Half-strength MAE | Unchanged-price MAE |
+|---|---:|---:|---:|
+| Current | **$0.6119** | **$0.6027** | **$0.5989** |
+| Lower temperature | $0.6641 | $0.6301 | $0.5989 |
+| Wider nucleus | $0.6396 | $0.6159 | $0.5989 |
+| More paths | $0.6271 | $0.6122 | $0.5989 |
+
+None beat the unchanged-price baseline on these development windows. Current sampling was best among the four GPU settings, but even its half-strength output remained worse than unchanged price. The same nominal sampling settings gave different numerical forecasts on the local CPU and Modal GPU (mean absolute difference $0.2692 across 96 forecast points), so the two hardware backends must be evaluated separately. This is expected to be possible with sampled GPU versus CPU random streams; this run does not establish the cause. No setting is promoted to the live service, and the already-inspected historical windows are not an independent validation set.
