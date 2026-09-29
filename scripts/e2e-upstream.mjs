@@ -39,7 +39,11 @@ globalThis.fetch=async(input,init={})=>{
   const pair=url.searchParams.get('pair'),interval=Number(url.searchParams.get('interval'));
   if(!['SOLUSD','ETHUSD','XBTUSD'].includes(pair)||![5,15,60,240,1440,10080].includes(interval))throw Error('Invalid fixture candle request');
   const ms=interval*60000,current=Math.floor(Date.now()/ms)*ms;
-  const rows=Array.from({length:161},(_,i)=>[Math.floor((current-(160-i)*ms)/1000),'118.5','119','118','118.6','118.5','10',10]);
+  const rows=Array.from({length:501},(_,i)=>[Math.floor((current-(500-i)*ms)/1000),'118.5','119','118','118.6','118.5','10',10]);
+  if(process.env.KRONOS_E2E_SERIES==='1')rows.forEach((row,i)=>{
+   const close=i===500?9999:118.6+i*.01+Math.sin(i*.2)*.3;
+   row[1]=String(close-.02);row[2]=String(close+.3);row[3]=String(close-.3);row[4]=String(close);row[5]=String(close);row[6]=String(100+i);
+  });
   return Response.json({error:[],result:{[pair]:rows,last:current/1000}});
  } if(url.origin==='https://perps-api.jup.ag'){
   if(url.pathname==='/v1/positions')return Response.json({dataList:[],count:0});

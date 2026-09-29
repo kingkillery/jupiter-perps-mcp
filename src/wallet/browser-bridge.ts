@@ -103,6 +103,18 @@ export class BrowserWalletBridge {
       this.sessions.set(token,Date.now());
       next();
     });
+    app.get("/wallet/kronos/evaluation/latest", async (_req,res) => {
+      try { res.json(await kronos.latestEvaluation()); }
+      catch { res.status(500).json({error:"Could not read the saved evaluation"}); }
+    });
+    app.post("/wallet/kronos/evaluate", async (req,res) => {
+      const controller = new AbortController();
+      const cancel = () => { if (!res.writableEnded) controller.abort(); };
+      res.on("close", cancel);
+      try { const result = await kronos.evaluate(req.body, controller.signal); if (!res.destroyed) res.json(result); }
+      catch (error) { if (!res.destroyed) res.status(400).json({error:error instanceof Error ? error.message : "Evaluation failed"}); }
+      finally { res.off("close", cancel); }
+    });
     app.get("/wallet/kronos/status", (_req,res) => res.json(kronos.status()));
     app.post("/wallet/kronos/forecast", async (req,res) => {
       const controller = new AbortController();

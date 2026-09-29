@@ -1,3 +1,4 @@
+import { evaluateKronos, latestEvaluation } from "./kronos-evaluation.js";
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -93,7 +94,19 @@ export class KronosService {
     } finally { this.busy = false; }
   }
 
-  private infer(request: unknown, signal: AbortSignal): Promise<any> {
+  latestEvaluation() { return latestEvaluation(); }
+
+  async evaluate(args: unknown, signal = new AbortController().signal) {
+    signal.throwIfAborted();
+    if (!this.status().ready) throw new Error("Install Kronos with npm run setup:kronos first");
+    if (this.busy) throw new Error("Kronos is busy. Wait or cancel the current job.");
+    this.busy = true;
+    try {
+      return await evaluateKronos(args, AbortSignal.any([signal, AbortSignal.timeout(480000)]), this.infer.bind(this), manifest);
+    } finally { this.busy = false; }
+  }
+
+  private infer(request: unknown, signal: AbortSignal, timeoutMs = 120000): Promise<any> {
     return new Promise((resolve, reject) => {
       // Deliberately exclude wallet keys, API tokens and other parent environment values.
       const env: NodeJS.ProcessEnv = {
@@ -104,7 +117,7 @@ export class KronosService {
       let output = "", diagnostics = "", reason: Error | undefined;
       const stop = (message: string) => { reason ??= new Error(message); child.kill(); };
       const abort = () => stop("Kronos forecast cancelled");
-      const timeout = setTimeout(() => stop("Kronos exceeded its two-minute inference limit"), 120000);
+      const timeout = setTimeout(() => stop("Kronos exceeded its inference time limit"), timeoutMs);
       signal.addEventListener("abort", abort, { once: true });
       if (signal.aborted) abort();
       child.stdout.on("data", chunk => {

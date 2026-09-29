@@ -1,3 +1,4 @@
+import { KRONOS_EVALUATION_TOOL } from "./services/kronos-evaluation.js";
 import { KronosService, KRONOS_TOOL } from "./services/kronos.js";
 import { EntryControls, ENTRY_TOOLS } from "./services/entry-controls.js";
 import { PROTECTION_TOOLS, runProtectionTool } from "./services/protection.js";
@@ -128,6 +129,7 @@ if (WALLET_MODE === "keypair" && WALLET_PRIVATE_KEY) {
 // Tool definitions
 const TOOLS: Tool[] = [
   KRONOS_TOOL,
+  KRONOS_EVALUATION_TOOL,
   ...PROTECTION_TOOLS,
   ...ENTRY_TOOLS,
   { name: "get_strategy_plan", description: "Read the configured SOL intraday plan, risk cap, target split, and live-execution blockers. Does not place orders.", inputSchema: { type: "object", properties: {} } },
@@ -518,6 +520,10 @@ function createServer(): Server {
     const { name, arguments: args } = request.params;
 
     try {
+      if (name === "evaluate_kronos") {
+        const result = await kronos.evaluate(args, extra.signal);
+        return {content:[{type:"text",text:JSON.stringify(result)}]};
+      }
       if (name === "get_kronos_forecast") {
         const result = await kronos.forecast(args, extra.signal);
         return {content:[{type:"text",text:JSON.stringify(result,null,2)}]};

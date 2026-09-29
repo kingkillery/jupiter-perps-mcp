@@ -111,6 +111,7 @@ let forecastController=null,forecastVersion=0,kronosReady=false;
 function forecastButtons(){
  $('kronos-generate').disabled=!kronosReady||!!forecastController;
  $('kronos-cancel').hidden=!forecastController;
+ evaluationButtons();
 }
 async function kronosStatus(){
  try{
@@ -165,7 +166,7 @@ function showForecast(result){
  $('kronos-message').textContent=result.cached?'Showing the same recent candle forecast from the one-minute cache.':'Forecast ready. Entry reviews and wallet approvals are unchanged.';
 }
 $('kronos-form').onsubmit=async event=>{
- event.preventDefault();if(forecastController||!kronosReady)return;
+ event.preventDefault();if(forecastController||evaluationController||!kronosReady)return;
  invalidateForecast();const version=forecastVersion,controller=new AbortController();forecastController=controller;forecastButtons();
  $('kronos-message').textContent='Reading completed candles and running Kronos locally… This can take up to two minutes.';
  try{
@@ -177,3 +178,70 @@ $('kronos-form').onsubmit=async event=>{
  finally{if(forecastController===controller)forecastController=null;forecastButtons();}
 };
 void kronosStatus();
+
+
+let evaluationController=null,evaluationVersion=0;
+function evaluationButtons(){
+ $('kronos-evaluate').disabled=!kronosReady||!!forecastController||!!evaluationController;
+ $('kronos-eval-cancel').hidden=!evaluationController;
+ $('kronos-generate').disabled=!kronosReady||!!forecastController||!!evaluationController;
+}
+function invalidateEvaluation(){
+ evaluationVersion++;evaluationController?.abort();$('kronos-eval-result').hidden=true;
+}
+$('kronos-form').addEventListener('input',()=>{
+ invalidateEvaluation();$('kronos-eval-message').textContent='Settings changed. Run a new evaluation.';
+});
+$('kronos-eval-cancel').onclick=()=>{
+ invalidateEvaluation();$('kronos-eval-message').textContent='Evaluation cancelled. No settings were changed.';
+};
+function showEvaluation(report){
+ $('kronos-eval-result').hidden=false;
+ $('kronos-eval-conclusion').textContent=report.conclusion;
+ const date=t=>new Date(t).toISOString().replace('T',' ').slice(0,16)+' UTC';
+ $('kronos-eval-meta').textContent=report.asset+' · '+report.interval+' · '+report.horizon+'-candle forecasts · '+report.candle_count+' completed candles. '+date(report.start_time)+' to '+date(report.end_time)+'. Selected on earlier data: '+report.selected_profile+'. Data ID: '+report.dataset_hash.slice(0,12)+'.';
+ $('kronos-eval-scores').replaceChildren();
+ for(const [phase,rows]of [['Selection',report.tuning],['Holdout',[...report.holdout,report.baseline]]]){
+  for(const row of rows){
+   const tr=document.createElement('tr');
+   for(const value of [phase,row.id+(row.id===report.selected_profile?' (selected)':''),money(row.mae_usd),money(row.rmse_usd),row.mape_pct.toFixed(3)+'%',row.direction_correct+'/'+row.direction_total+' ('+row.direction_accuracy_pct.toFixed(1)+'%)']){
+    const td=document.createElement('td');td.textContent=value;tr.append(td);
+   }
+   $('kronos-eval-scores').append(tr);
+  }
+ }
+ $('kronos-eval-snippets').replaceChildren();
+ for(const row of report.rows.filter(r=>r.phase==='holdout'&&r.profile===report.selected_profile)){
+  const details=document.createElement('details'),summary=document.createElement('summary'),table=document.createElement('table');
+  summary.textContent='Snippet '+(row.window-report.selection_windows+1)+' · context ends '+date(row.context_end)+' · starting close '+money(row.origin_close);
+  table.className='forecast-table';const header=document.createElement('tr');
+  for(const label of ['Candle starts (UTC)','Predicted close','Actual close','Absolute error']){const th=document.createElement('th');th.textContent=label;header.append(th);}
+  table.append(header);
+  row.actual.forEach((p,i)=>{
+   const tr=document.createElement('tr');
+   for(const value of [date(p.time),money(row.predicted[i].close),money(p.close),money(Math.abs(row.predicted[i].close-p.close))]){
+    const td=document.createElement('td');td.textContent=value;tr.append(td);
+   }
+   table.append(tr);
+  });
+  const scroll=document.createElement('div');scroll.className='table-scroll';scroll.append(table);
+  details.append(summary,scroll);$('kronos-eval-snippets').append(details);
+ }
+ $('kronos-eval-message').textContent='Evaluation saved locally. No live settings, model weights or wallet permissions were changed.';
+}
+$('kronos-evaluate').onclick=async()=>{
+ if(evaluationController||forecastController||!kronosReady)return;
+ invalidateEvaluation();const version=evaluationVersion,controller=new AbortController();evaluationController=controller;evaluationButtons();
+ $('kronos-eval-message').textContent='Replaying historical snippets locally, then scoring the held-out period… Allow up to eight minutes.';
+ try{
+  const response=await fetch('/wallet/kronos/evaluate',{method:'POST',headers:{'Content-Type':'application/json','X-Wallet-Bridge':'1'},
+   body:JSON.stringify({asset:$('kronos-asset').value,interval:$('kronos-interval').value,horizon:Number($('kronos-horizon').value)}),signal:controller.signal});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'Evaluation failed');
+  if(version===evaluationVersion)showEvaluation(result);
+ }catch(e){if(version===evaluationVersion)$('kronos-eval-message').textContent=e.name==='AbortError'?'Evaluation cancelled.':e.message;}
+ finally{if(evaluationController===controller)evaluationController=null;evaluationButtons();}
+};
+const initialEvaluationVersion=evaluationVersion;
+api('kronos/evaluation/latest').then(report=>{
+ if(report&&initialEvaluationVersion===evaluationVersion&&!evaluationController)showEvaluation(report);
+}).catch(e=>{$('kronos-eval-message').textContent=e.message;});

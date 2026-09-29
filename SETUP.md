@@ -91,3 +91,24 @@ Each request uses 128 completed Kraken spot USD candles, excludes the unfinished
 This is an experimental closing-price scenario, not a calibrated confidence band or validated SOL trading signal. No backtested profitability claim is made. It does not arm entries, alter the saved strategy, or prepare/sign/submit orders. Spot model outputs are not Jupiter execution quotes.
 
 After installing the runtime, run `npm run test:e2e:kronos` for a full server/MCP test using the actual installed model and fixture market data. `npm run test:e2e` runs the existing wallet and trading-safety scenarios without requiring a model install. No unit tests are used.
+
+## Historical snippets and tuning checks
+
+Use **Check prediction accuracy → Evaluate recent snippets** beneath the Kronos forecast. The asset, interval and forecast horizon come from the controls above. No wallet connection is needed. The same flow is available through MCP `evaluate_kronos` with optional `asset`, `interval` and `horizon` (same defaults and limits as forecasting). Clients should allow up to eight minutes.
+
+The pilot retrieves exactly `128 + 12 × horizon` completed Kraken candles. At the default eight-candle horizon, that is 224 candles. The first 128 provide context. The next six non-overlapping forecast windows select between the existing 128-candle context and a 64-candle context by mean absolute price error. Selection is frozen before scoring the following six windows. The default and selected profile are compared with an unchanged-price baseline on identical held-out labels; if the default is selected, it appears once.
+
+Each inference request receives only the preceding context candles and future timestamps. Actual future prices are retained outside the model worker and scored afterward. Kronos normalizes each context independently. Sampling stays fixed at three paths, seed 42, temperature 1, top-p 0.9. The same pretrained weights are used throughout. This is context-length tuning, not weight fine-tuning.
+
+The report contains:
+- MAE and RMSE in USD across all forecast closes (lower is better).
+- MAPE: mean absolute percentage price error.
+- Endpoint direction matches (up/down/flat relative to the last context close), including the numerator and denominator. Flat means a price difference below 1e-10 USD.
+- Mean-error improvement against the unchanged-price baseline and default, or null when the comparison error is zero.
+- Per-snippet actual and predicted prices, timestamps, context bounds and the selected profile.
+
+Reports and their exact input candle snapshots are saved locally under ignored `.runtime/kronos-evaluations/`, with dataset hashes, pinned model revisions and sampling settings. The page restores the latest completed report after reload and provides a JSON download. Cancelling leaves the last completed report intact. Test runs use a separate `.runtime/kronos-evaluations-e2e/` directory.
+
+Six held-out windows are an exploratory pilot, not evidence of stable accuracy, profitability or statistical significance. Adjacent windows still share market conditions. A repeatedly viewed holdout becomes development data; a later comparison needs new periods. Historical overlap with the pretrained model's original training data cannot be ruled out. Price accuracy does not measure trading PnL or include costs. No profile is automatically adopted, no model weights are retrained, and wallet controls remain unchanged.
+
+`npm run test:e2e:kronos` now also checks real-model historical evaluation through MCP, recomputed error metrics, chronological separation, persistence, access control and cancellation. No unit tests or real trades run.

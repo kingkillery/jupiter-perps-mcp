@@ -14,6 +14,20 @@
   <p id="kronos-details" class="muted"></p>
   <details><summary>Forecast prices</summary><table class="forecast-table"><thead><tr><th>Candle starts (UTC)</th><th>Model closing price (USD)</th></tr></thead><tbody id="kronos-prices"></tbody></table></details>
  </div>
+
+ <div class="kronos-evaluation" aria-labelledby="kronos-evaluation-title">
+  <h3 id="kronos-evaluation-title">Check prediction accuracy</h3>
+  <p class="muted">Uses the asset, interval and horizon above. Twelve historical snippets are split chronologically: six select between 64 and 128 past candles; six later snippets check that choice. Future prices stay hidden from the model.</p>
+  <div class="control-actions"><button id="kronos-evaluate" type="button" disabled>Evaluate recent snippets</button><button id="kronos-eval-cancel" class="secondary" type="button" hidden>Cancel evaluation</button></div>
+  <p id="kronos-eval-message" role="status">A small pilot, compared with predicting no price change. Live settings stay unchanged.</p>
+  <div id="kronos-eval-result" hidden>
+   <p id="kronos-eval-conclusion"></p><p id="kronos-eval-meta" class="muted"></p>
+   <div class="table-scroll"><table class="forecast-table"><thead><tr><th>Period</th><th>Context / baseline</th><th>Mean error (USD) ↓</th><th>RMSE (USD) ↓</th><th>Mean error (%) ↓</th><th>End direction</th></tr></thead><tbody id="kronos-eval-scores"></tbody></table></div>
+   <p class="muted">Direction counts matching up/down/flat at each snippet’s final candle, not profitable trades. Six holdout windows are too few to establish reliability. Repeatedly reviewing the same holdout makes it development data; confirm changes on new periods.</p>
+   <details><summary>Inspect held-out snippets</summary><div id="kronos-eval-snippets"></div></details>
+   <p><a href="/wallet/kronos/evaluation/latest" download="kronos-evaluation.json">Download latest evaluation report</a></p>
+  </div>
+ </div>
 </section><section class="entry-controls" aria-labelledby="controls-title">
  <div class="section-heading"><h2 id="controls-title">Entry controls</h2><span class="tag" id="entry-lock-state" role="status">Entry reviews locked</span></div>
  <p class="muted">Preview the cost and risk first. Each entry must include a full stop and three equal-third exits before it can reach your wallet.</p>
