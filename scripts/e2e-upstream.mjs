@@ -35,7 +35,13 @@ async function transaction(body,path,method){
 globalThis.fetch=async(input,init={})=>{
  const url=new URL(String(input));await delay(35);
  if(url.origin==='https://ultra-api.jup.ag'&&url.pathname.startsWith('/holdings/'))return Response.json({tokens:{EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v:[{uiAmount:12.5}]}});
- if(url.origin==='https://perps-api.jup.ag'){
+ if(url.origin==='https://api.kraken.com'&&url.pathname==='/0/public/OHLC'){
+  const pair=url.searchParams.get('pair'),interval=Number(url.searchParams.get('interval'));
+  if(!['SOLUSD','ETHUSD','XBTUSD'].includes(pair)||![5,15,60,240,1440,10080].includes(interval))throw Error('Invalid fixture candle request');
+  const ms=interval*60000,current=Math.floor(Date.now()/ms)*ms;
+  const rows=Array.from({length:61},(_,i)=>[Math.floor((current-(60-i)*ms)/1000),'118.5','119','118','118.6','118.5','10',10]);
+  return Response.json({error:[],result:{[pair]:rows,last:current/1000}});
+ } if(url.origin==='https://perps-api.jup.ag'){
   if(url.pathname==='/v1/positions')return Response.json({dataList:[],count:0});
   if(url.pathname==='/v2/positions')return Response.json({dataList:await positions(url.searchParams.get('walletAddress')),count:3});
   if(url.pathname==='/v2/transaction/execute')throw new Error('BROADCAST_FORBIDDEN_BY_E2E');

@@ -4,6 +4,7 @@
  */
 
 import { fetchCandles } from "../api.js";
+import { CANDLE_SOURCE } from "./candle-feed.js";
 import { CandlesOutput, CandleInterval } from "../types.js";
 
 /**
@@ -92,6 +93,7 @@ export async function getCandles(
   const result: CandlesOutput = {
     asset: asset.toUpperCase(),
     interval,
+    source: CANDLE_SOURCE,
     data,
   };
 

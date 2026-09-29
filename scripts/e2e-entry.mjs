@@ -28,7 +28,8 @@ async function run(scenario){
   assert.equal(p.body.submitted,false);assert.equal(p.body.targets.length,3);
   assert.equal(p.body.targets.reduce((sum,t)=>sum+Math.round(t.size_usd*1e6),0),Math.round(p.body.size_usd*1e6));
   if(scenario==='missing_feed'){assert(p.body.blockers.some(b=>/candle feed is unavailable/.test(b)));assert(p.body.risk.planned_loss_usd>0);return;}
-  if(scenario==='stale_candles'){assert(p.body.blockers.some(b=>/Fresh completed/.test(b)));return;}
+  if(scenario==='stale_candles'){assert(p.body.blockers.some(b=>/candle feed is unavailable/.test(b)));return;}
+  if(scenario==='divergent_price'){assert(p.body.blockers.some(b=>/spot candle price differs/.test(b)));return;}
   assert(p.body.eligible_for_preparation,JSON.stringify(p.body));
   assert(p.body.risk.planned_loss_usd<=5);
   assert.equal((await req('entry/review',{preview_id:p.body.preview_id,signal_confirmed:true})).status,400);
@@ -36,7 +37,8 @@ async function run(scenario){
   assert.equal((await req('entry/review',{preview_id:p.body.preview_id,signal_confirmed:false})).status,400);
   if(scenario!=='safe'){
    const rejected=await req('entry/review',{preview_id:p.body.preview_id,signal_confirmed:true});
-   assert.equal(rejected.status,400);assert.match(rejected.body.error,scenario==='missing_target'?/missing.*target/i:/slippage/i);
+   assert.equal(rejected.status,400);const rejection={missing_target:/missing.*target/i,excess_slippage:/slippage/i,wrong_market:/perpetuals/i,keeper_change:/Keeper signers changed/i,wrong_destination:/receiving account/i,extra_signer:/Unexpected required transaction signer/i};
+   assert.match(rejected.body.error,rejection[scenario]);
    assert.equal((await req('status')).body.pending,null);return;
   }
   for(const patch of [{leverage:7.1},{slippage_bps:201},{collateral_usdc:-1},{holding_hours:0},{max_planned_loss_usd:50}]){
@@ -68,5 +70,5 @@ async function run(scenario){
   assert.equal((await req('approval',{id:job.id,reject:true})).status,409);
  }finally{await client?.close();if(child.exitCode===null&&child.signalCode===null){const stopped=once(child,'exit');child.kill();await stopped;}}
 }
-for(const scenario of ['safe','missing_target','excess_slippage','stale_candles','missing_feed']){await run(scenario);console.log('PASS entry controls: '+scenario);}
+for(const scenario of ['safe','missing_target','excess_slippage','stale_candles','missing_feed','divergent_price','wrong_market','keeper_change','wrong_destination','extra_signer']){await run(scenario);console.log('PASS entry controls: '+scenario);}
 console.log('PASS: real HTTP/MCP risk controls, mandatory defaults, server caps, quote costs, exact thirds, balance/sequence/slippage rejection, atomic-protection validation, wallet-only review, lock/cancellation, valid synthetic approval, and duplicate-submission latch. No live transactions.');

@@ -83,36 +83,6 @@ export const ULTRA_API = {
 export const USDC_MINT_ADDRESS = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 /**
- * Oracle Security History API for candle data
- */
-export const CANDLES_API = {
-  BASE_URL: "https://history.oraclesecurity.org/trading-view/data",
-};
-
-/**
- * Interval mapping for candle data API
- * Maps our interval format to the API's expected format
- */
-export const INTERVAL_MAPPING: Record<string, string> = {
-  "5m": "5",
-  "15m": "15",
-  "1h": "1H",
-  "4h": "4H",
-  "1d": "1D",
-  "1w": "1W",
-};
-
-/**
- * Asset feed mapping for candle data API
- * Maps asset symbols to their oracle feed names
- */
-export const ASSET_FEED_MAPPING: Record<string, string> = {
-  SOL: "SOLUSD",
-  ETH: "ETHUSD",
-  BTC: "BTCUSD",
-};
-
-/**
  * Helper function to get token info by symbol
  */
 export function getTokenInfo(symbol: string): TokenInfo {

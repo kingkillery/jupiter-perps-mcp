@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { TOKENS, USDC_MINT_ADDRESS, CANDLES_API } from "../constants.js";
+import { TOKENS, USDC_MINT_ADDRESS } from "../constants.js";
+import { fetchKrakenCandles } from "./candle-feed.js";
 import type { TransactionSigner } from "../utils/transactions.js";
 import { validateEntryTransaction } from "./entry-validation.js";
 
@@ -61,7 +62,7 @@ export class EntryControls {
    this.ctx.connection.getBalance(wallet,"confirmed"),
    api(BASE+"/positions?walletAddress="+address,signal),
    api("https://perps-api.jup.ag/v1/positions/increase",signal,{walletAddress:address,marketMint:TOKENS.SOL.mint.toBase58(),inputMint:USDC_MINT_ADDRESS,collateralMint:input.side==="long"?TOKENS.SOL.mint.toBase58():USDC_MINT_ADDRESS,side:input.side,leverage:String(input.leverage),maxSlippageBps:String(input.slippage_bps),collateralTokenDelta:micro(input.collateral_usdc).toString(),includeSerializedTx:false,tpsl:[]}),
-   api(CANDLES_API.BASE_URL+"?feed=SOLUSD&type=15&from="+(now-8*900000)+"&till="+now,signal).catch(()=>({result:[],unavailable:true}))
+   fetchKrakenCandles("SOL","15m",8,signal).catch(()=>({result:[],unavailable:true,current_price:null,source:null,sampled_at:null}))
   ]);
   signal.throwIfAborted();
   const q=quoteResponse.quote;
@@ -84,7 +85,8 @@ export class EntryControls {
   const conversion=Math.max(0,input.collateral_usdc-collateral-entryFees);
   const plannedLoss=up(priceLoss+entryFees+exitFees+borrow+networkReserve+conversion);
   const blockers:string[]=[];
-  if(candles.unavailable)blockers.push("The candle feed is unavailable; entry review is blocked until completed candles can be verified");
+  if("unavailable" in candles)blockers.push("The candle feed is unavailable; entry review is blocked until completed candles can be verified");
+  else if(Math.abs(candles.current_price/mark-1)>0.0025)blockers.push("The spot candle price differs from Jupiter Perps by more than 25 basis points; entry review is blocked");
   if(balance+1e-6<input.collateral_usdc)blockers.push("Insufficient USDC for the reviewed collateral");
   if(nativeBalance/1e9<networkReserveSol)blockers.push("SOL balance is below the 0.03 SOL account and transaction allowance");
   if(positions.dataList.some((p:any)=>p.asset==="SOL"))blockers.push("An existing SOL position must be reviewed first; adding to positions is disabled");
@@ -110,7 +112,7 @@ export class EntryControls {
   return {asset:"SOL",side:input.side,input,mark_price:mark,entry_price:entry,adverse_entry_price:adverseEntry,stop_price:plan.stop,size_usd:size,units_sol:units,leverage:lev,collateral_usdc:input.collateral_usdc,usdc_balance:balance,sol_balance:nativeBalance/1e9,
    targets:plan.targets.map((price:number,i:number)=>({price,size_usd:Number(i===2?total-2n*third:third)/1e6})),
    risk:{planned_loss_usd:plannedLoss,max_planned_loss_usd:this.status().max_planned_loss_usd,price_loss_with_slippage_usd:up(priceLoss),entry_fees_usd:entryFees,exit_fee_allowance_usd:up(exitFees),borrow_allowance_usd:up(borrow),network_and_account_allowance_usd:up(networkReserve),collateral_conversion_allowance_usd:up(conversion),holding_hours:input.holding_hours,exit_slippage_is_an_allowance_not_a_guarantee:true},
-   latest_completed_candle:last?{time:last.time,close:last.close}:null,blockers,eligible_for_preparation:blockers.length===0,transaction_verified:false,submitted:false};
+   candle_source:candles.source,reference_spot_price:candles.current_price,latest_completed_candle:last?{time:last.time,close:last.close}:null,blockers,eligible_for_preparation:blockers.length===0,transaction_verified:false,submitted:false};
  }
  async preview(args:any,signal=new AbortController().signal){
   const address=this.ctx.address();if(!address)throw new Error("Connect Jupiter Wallet first");

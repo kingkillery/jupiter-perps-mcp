@@ -85,7 +85,9 @@ try {
     ['close_position_partial',{position:long.positionPubkey,size_usd:1000}],
     ['open_position',{asset:'SOL',side:'Long',collateral_amount:10,leverage:1.1}]
   ])assert.equal((await clients[0].callTool({name,arguments:args})).isError,true,name+' must fail closed');
-  const rejected=await clients[0].callTool({name:'get_candles',arguments:{asset:'INVALID',interval:'1h',limit:10}});
+  const candles=await invoke('get_candles',{asset:'SOL',interval:'15m',limit:10});
+  assert.equal(candles.source,'Kraken spot USD');assert.equal(candles.data.length,10);
+  assert(candles.data.at(-1).time*1000+900000<=Date.now(),'The unfinished Kraken row must be omitted');  const rejected=await clients[0].callTool({name:'get_candles',arguments:{asset:'INVALID',interval:'1h',limit:10}});
   assert.equal(rejected.isError,true);
   assert.match(rejected.content[0].text,/Invalid asset/);
   assert(!logs.includes('bigint: Failed to load bindings'));

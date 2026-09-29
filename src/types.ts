@@ -225,7 +225,7 @@ export interface Candle {
 }
 
 /**
- * Response from Oracle Security history API
+ * Response from the validated candle provider
  */
 export interface CandlesApiResponse {
   result: Candle[];
@@ -237,6 +237,7 @@ export interface CandlesApiResponse {
 export interface CandlesOutput {
   asset: string;
   interval: CandleInterval;
+  source: string;
   data: Candle[];
 }
 

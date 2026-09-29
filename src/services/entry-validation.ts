@@ -22,6 +22,9 @@ export async function validateEntryTransaction(tx:VersionedTransaction,prepared:
  const tables=await Promise.all(tx.message.addressTableLookups.map(async l=>{const r=await ctx.connection.getAddressLookupTable(l.accountKey);if(!r.value)throw new Error("Lookup table unavailable");return r.value;}));
  const message=TransactionMessage.decompile(tx.message,{addressLookupTableAccounts:tables}),coder=new BorshInstructionCoder(IDL);
  const remaining=[...orders],requests=new Set<string>();let entries=0;let budgetLimit=false,budgetPrice=false,ataCount=0;
+ const expectedSigners=new Set<string>([address]);let keeper:string|undefined,apiKeeper:string|undefined;
+ const perpetuals=PublicKey.findProgramAddressSync([Buffer.from("perpetuals")],PROGRAM)[0].toBase58();
+ const eventAuthority=PublicKey.findProgramAddressSync([Buffer.from("__event_authority")],PROGRAM)[0].toBase58();
  for(const ix of message.instructions){
   if(ix.programId.equals(ComputeBudgetProgram.programId)){
    if(ix.data[0]===2&&!budgetLimit&&ix.data.length===5&&ix.data.readUInt32LE(1)>0&&ix.data.readUInt32LE(1)<=1400000){budgetLimit=true;continue;}
@@ -37,8 +40,12 @@ export async function validateEntryTransaction(tx:VersionedTransaction,prepared:
   const def=IDL.instructions.find(i=>i.name===decoded.name)!;
   if(ix.keys.length!==def.accounts.length)throw new Error("Unexpected entry accounts");
   const accounts=new Map<string,string>(def.accounts.map((a,i)=>[a.name,ix.keys[i]?.pubkey.toBase58()]));
-  const expected={owner:address,position:position.toBase58(),pool:JLP_POOL_ACCOUNT_PUBKEY.toBase58(),custody:TOKENS.SOL.custodyAccount.toBase58(),collateralCustody:TOKENS.USDC.custodyAccount.toBase58(),tokenProgram:TOKEN_PROGRAM_ID.toBase58(),systemProgram:SystemProgram.programId.toBase58(),associatedTokenProgram:ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(),program:PROGRAM.toBase58(),referral:PROGRAM.toBase58()};
+  const expected={owner:address,perpetuals,eventAuthority,position:position.toBase58(),pool:JLP_POOL_ACCOUNT_PUBKEY.toBase58(),custody:TOKENS.SOL.custodyAccount.toBase58(),collateralCustody:TOKENS.USDC.custodyAccount.toBase58(),tokenProgram:TOKEN_PROGRAM_ID.toBase58(),systemProgram:SystemProgram.programId.toBase58(),associatedTokenProgram:ASSOCIATED_TOKEN_PROGRAM_ID.toBase58(),program:PROGRAM.toBase58(),referral:PROGRAM.toBase58()};
   for(const [key,value]of Object.entries(expected))if(accounts.has(key)&&accounts.get(key)!==value)throw new Error("Unexpected "+key+" in entry");
+  const currentKeeper=accounts.get("keeper"),currentApiKeeper=accounts.get("apiKeeper");
+  if(!currentKeeper||!currentApiKeeper||!ix.keys[0]?.isSigner||!ix.keys[1]?.isSigner)throw new Error("Missing Jupiter keeper signers");
+  if(keeper===undefined){keeper=currentKeeper;apiKeeper=currentApiKeeper;expectedSigners.add(keeper);expectedSigners.add(apiKeeper);}
+  else if(keeper!==currentKeeper||apiKeeper!==currentApiKeeper)throw new Error("Keeper signers changed between entry and protection");
   const params=(decoded.data as any).params;
   if(decoded.name==="instantIncreasePosition"){
    if(++entries!==1||accounts.get("tokenLedger")!==PROGRAM.toBase58())throw new Error("Unsupported entry or token-ledger route");
@@ -58,6 +65,9 @@ export async function validateEntryTransaction(tx:VersionedTransaction,prepared:
   }else throw new Error("Entry must atomically install the stop and three equal-third targets");
  }
  if(entries!==1||remaining.length)throw new Error("Entry is missing its stop or equal-third targets; no signature requested");
+ for(const signer of tx.message.staticAccountKeys.slice(0,tx.message.header.numRequiredSignatures)){
+  if(!expectedSigners.has(signer.toBase58()))throw new Error("Unexpected required transaction signer");
+ }
  const q=prepared.quote;
  const price=usd(q?.averagePriceUsd),size=usd(q?.sizeUsdDelta);
  if(Math.abs(size-view.size_usd)>1e-6||price+1e-6<view.adverse_entry_price||price>view.entry_price)throw new Error("Prepared quote changed; preview again");
