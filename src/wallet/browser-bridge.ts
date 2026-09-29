@@ -1,3 +1,4 @@
+import type { CandidateInbox } from "../services/candidate-inbox.js";
 import type { KronosService } from "../services/kronos.js";
 import type { EntryControls } from "../services/entry-controls.js";
 import { randomBytes, createPublicKey, verify } from "node:crypto";
@@ -69,7 +70,7 @@ export class BrowserWalletBridge {
     };
   }
 
-  mount(app: Express, port: number, entries: EntryControls, kronos: KronosService) {
+  mount(app: Express, port: number, entries: EntryControls, kronos: KronosService, candidateInbox: CandidateInbox) {
     const origin = `http://127.0.0.1:${port}`;
     const webRoot = fileURLToPath(new URL("../../web/", import.meta.url));
     app.use("/wallet", (req, res, next) => {
@@ -102,6 +103,23 @@ export class BrowserWalletBridge {
       if (!lastUsed || Date.now()-lastUsed>600_000) { res.status(401).json({error:"Reload the wallet page"}); return; }
       this.sessions.set(token,Date.now());
       next();
+    });
+    app.get("/wallet/candidates/status", (_req,res) => res.json(candidateInbox.status()));
+    app.get("/wallet/candidates/latest", async (_req,res) => {
+      try {res.json(await candidateInbox.latest());}
+      catch {res.status(500).json({error:"Could not read the candidate inbox"});}
+    });
+    app.post("/wallet/candidates/outcome", async (_req,res) => {
+      try {res.json(await candidateInbox.checkOutcome());}
+      catch(error){res.status(400).json({error:error instanceof Error?error.message:"Outcome check failed"});}
+    });
+    app.post("/wallet/candidates/scan", async (req,res) => {
+      const controller = new AbortController();
+      const cancel = () => { if (!res.writableEnded) controller.abort(); };
+      res.on("close", cancel);
+      try {const result=await candidateInbox.scan(req.body,controller.signal);if(!res.destroyed)res.json(result);}
+      catch(error){if(!res.destroyed)res.status(400).json({error:error instanceof Error?error.message:"Scan failed"});}
+      finally {res.off("close",cancel);}
     });
     app.get("/wallet/kronos/evaluation/latest", async (_req,res) => {
       try { res.json(await kronos.latestEvaluation()); }

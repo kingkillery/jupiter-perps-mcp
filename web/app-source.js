@@ -245,3 +245,75 @@ const initialEvaluationVersion=evaluationVersion;
 api('kronos/evaluation/latest').then(report=>{
  if(report&&initialEvaluationVersion===evaluationVersion&&!evaluationController)showEvaluation(report);
 }).catch(e=>{$('kronos-eval-message').textContent=e.message;});
+
+
+let candidateController=null,candidateScan=null;
+const candidateTime=t=>new Date(t).toLocaleString();
+function candidateControls(){
+ $('candidate-scan').disabled=!!candidateController;
+ $('candidate-cancel').hidden=!candidateController;
+}
+function showCandidate(scan){
+ candidateScan=scan;$('candidate-result').hidden=false;
+ const choice=scan.decision?.id;
+ $('candidate-summary').textContent=scan.status==='unconfigured'?'Snapshot collected. Configure the Jev gateway key to rank candidates.':
+  scan.status==='watch'?'Jev found no candidate ready for a review route.':
+  choice?'Jev selected '+scan.snapshot.candidates.find(c=>c.id===choice)?.label+' for deeper review.':'Candidate scan completed without a ranking.';
+ $('candidate-meta').textContent='Collected '+candidateTime(scan.created_at)+' · Expires '+candidateTime(scan.snapshot.expires_at)+' · Snapshot '+scan.snapshot_hash.slice(0,12)+
+  (scan.decision?' · '+scan.decision.model:'');
+ $('candidate-outcome').textContent=scan.outcome?.status==='observed'?'Observed SOL move: '+scan.outcome.realized_change_pct.toFixed(2)+'% over eight candles.'+(scan.outcome.selected_direction_matched===null?'':' Selected direction '+(scan.outcome.selected_direction_matched?'matched.':'did not match.')):'Outcome pending until eight future SOL candles complete.';
+ $('candidate-list').replaceChildren();
+ const list=scan.ranked.length?scan.ranked:scan.snapshot.candidates;
+ for(const c of list){
+  const card=document.createElement('article'),title=document.createElement('h3'),desc=document.createElement('p'),badge=document.createElement('span');
+  title.textContent=c.label;desc.textContent=c.description;
+  badge.textContent=c.selection_share===undefined?'Unranked':(c.selection_share*100).toFixed(1)+'% review share';
+  badge.className='tag';card.append(title,badge,desc);
+  if(c.id===choice&&scan.status==='review_candidates'&&c.execution_scope==='saved_SOL_plan'){
+   const button=document.createElement('button');button.type='button';button.textContent='Review in entry controls';
+   button.disabled=Date.now()>=scan.snapshot.expires_at;
+   button.onclick=()=>{
+    if(Date.now()>=scan.snapshot.expires_at){$('candidate-message').textContent='This scan expired. Scan again before reviewing.';return;}
+    $('entry-side').value=c.side;$('entry-side').dispatchEvent(new Event('input',{bubbles:true}));
+    $('entry-form').scrollIntoView({behavior:'smooth',block:'start'});
+    if(account)$('entry-form').requestSubmit();
+    else $('candidate-message').textContent='Connect Jupiter Wallet, then preview this selected SOL setup in Entry controls.';
+   };
+   card.append(button);
+  }
+  $('candidate-list').append(card);
+ }
+ $('candidate-evidence').replaceChildren();
+ for(const lane of scan.snapshot.lanes){
+  const block=document.createElement('div'),heading=document.createElement('h4'),p=document.createElement('p');
+  heading.textContent=lane.asset+' · '+lane.interval;
+  p.textContent='Completed '+candidateTime(lane.last_completed_time)+' · Close '+money(lane.last_completed_close)+
+   ' · 8-bar change '+lane.change_8_bars_pct.toFixed(2)+'% · RSI '+lane.rsi_14.toFixed(1)+
+   ' · EMA '+money(lane.ema_21)+' · ATR '+money(lane.atr_14)+
+   (lane.market?' · Jupiter mark '+money(lane.market.index_price)+' · 24h '+lane.market.stats_24h.change_pct.toFixed(2)+'%':' · Jupiter market unavailable');
+  block.append(heading,p);$('candidate-evidence').append(block);
+ }
+ const more=document.createElement('p');
+ more.textContent='Kronos: '+(scan.snapshot.forecast?scan.snapshot.forecast.end_change_pct.toFixed(2)+'% at the 8-candle path end':'unavailable')+
+  '. Warnings: '+(scan.snapshot.warnings.length?scan.snapshot.warnings.join('; '):'none')+
+  '. Wallet: '+(scan.snapshot.wallet_connected?'connected at scan time':'not connected at scan time')+'.';
+ $('candidate-evidence').append(more);
+ $('candidate-message').textContent=scan.status==='review_candidates'?'Review the highlighted setup and run a fresh server preview.':
+  scan.status==='watch'?'Keep watching or examine the evidence. No candidate was sent to entry review.':'Snapshot saved locally; Jev ranking awaits its key.';
+}
+$('candidate-cancel').onclick=()=>{candidateController?.abort();$('candidate-message').textContent='Scan cancelled.';};
+$('candidate-outcome-button').onclick=async()=>{try{const result=await api('candidates/outcome',{});$('candidate-outcome').textContent=result.status==='observed'?'Observed SOL move: '+result.realized_change_pct.toFixed(2)+'% over eight candles.'+(result.selected_direction_matched===null?'':' Selected direction '+(result.selected_direction_matched?'matched.':'did not match.')):result.reason;}catch(e){$('candidate-outcome').textContent=e.message;}};
+$('candidate-scan').onclick=async()=>{
+ if(candidateController)return;const controller=new AbortController();candidateController=controller;candidateControls();
+ $('candidate-message').textContent='Collecting market evidence and asking Jev to rank review options…';
+ try{
+  const response=await fetch('/wallet/candidates/scan',{method:'POST',headers:{'Content-Type':'application/json','X-Wallet-Bridge':'1'},body:'{}',signal:controller.signal});
+  const result=await response.json();if(!response.ok)throw new Error(result.error||'Candidate scan failed');
+  showCandidate(result);
+ }catch(e){$('candidate-message').textContent=e.name==='AbortError'?'Scan cancelled.':e.message;}
+ finally{if(candidateController===controller)candidateController=null;candidateControls();}
+};
+api('candidates/status').then(status=>{
+ $('candidate-provider').textContent=status.configured?'Jev · Key stored':'Jev · Key needed';
+}).catch(e=>{$('candidate-provider').textContent='Jev · Offline';$('candidate-message').textContent=e.message;});
+api('candidates/latest').then(scan=>{if(scan&&!candidateController)showCandidate(scan);else if(!scan)$('candidate-message').textContent='No scan yet. Click Scan candidates.';}).catch(e=>{$('candidate-message').textContent=e.message;});

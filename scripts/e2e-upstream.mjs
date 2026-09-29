@@ -34,6 +34,15 @@ async function transaction(body,path,method){
 }
 globalThis.fetch=async(input,init={})=>{
  const url=new URL(String(input));await delay(35);
+ if(process.env.E2E_CANDIDATES==='1'&&url.origin==='https://openrouter.ai'&&url.pathname==='/api/v1/systemone'){
+  const request=JSON.parse(init.body);
+  if(request.model!=='jev-1.13'||!request.questions?.best_candidate||!request.questions?.evidence_consistent)throw Error('Unexpected Jev request');
+  if(JSON.stringify(request.state).includes('walletAddress')||JSON.stringify(request.state).includes('OPENROUTER_API_KEY'))throw Error('Private data sent to Jev');
+  if(process.env.E2E_BAD_JEV==='1')return Response.json({model:'jev-test',answers:{best_candidate:{type:'choice',choice:'submit_trade',confidence:1,probabilities:{submit_trade:1}},evidence_consistent:{type:'noul',noul:1}}});
+  return Response.json({model:'typesafe/jev-1.13-fixture',answers:{best_candidate:{type:'choice',choice:'sol_short',confidence:.9,probabilities:{sol_long:.03,sol_short:.82,eth_watch:.05,btc_watch:.03,none:.07}},evidence_consistent:{type:'noul',noul:.92}},usage:{input_tokens:1200,output_tokens:30,cost:.0001}});
+ }
+ if(process.env.E2E_CANDIDATES==='1'&&url.origin==='https://perps-api.jup.ag'&&url.pathname==='/v1/pool-info')return Response.json({longAvailableLiquidity:'1000000',longBorrowRatePercent:'0.001',longUtilizationPercent:'0.2',shortAvailableLiquidity:'1000000',shortBorrowRatePercent:'0.001',shortUtilizationPercent:'0.2',openFeePercent:'0.06',maxPriceImpactFeePercent:'0.1'});
+ if(process.env.E2E_CANDIDATES==='1'&&url.origin==='https://perps-api.jup.ag'&&url.pathname==='/v2/market-stats')return Response.json({price:'118.7',priceChange24H:'1.2',priceHigh24H:'120',priceLow24H:'116',volume:'5000000'});
  if(url.origin==='https://ultra-api.jup.ag'&&url.pathname.startsWith('/holdings/'))return Response.json({tokens:{EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v:[{uiAmount:12.5}]}});
  if(url.origin==='https://api.kraken.com'&&url.pathname==='/0/public/OHLC'){
   const pair=url.searchParams.get('pair'),interval=Number(url.searchParams.get('interval'));

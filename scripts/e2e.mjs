@@ -52,7 +52,7 @@ try {
     clients.push(client);
   }
   const listings=await Promise.all(clients.flatMap(client => Array.from({length:5},()=>client.listTools())));
-  for (const listing of listings) assert.equal(listing.tools.length,21);
+  for (const listing of listings) assert.equal(listing.tools.length,24);
   const portfolios=await Promise.all(clients.flatMap(client => Array.from({length:2},()=>client.callTool({name:'get_account_portfolio',arguments:{}}))));
   for(const result of portfolios) {
     assert(!result.isError,JSON.stringify(result));

@@ -1,3 +1,4 @@
+import { CandidateInbox, CANDIDATE_TOOLS } from "./services/candidate-inbox.js";
 import { KRONOS_EVALUATION_TOOL } from "./services/kronos-evaluation.js";
 import { KronosService, KRONOS_TOOL } from "./services/kronos.js";
 import { EntryControls, ENTRY_TOOLS } from "./services/entry-controls.js";
@@ -111,6 +112,8 @@ const MAX_COLLATERAL_USDC = 1_000_000;
 const connection = new Connection(RPC_URL, "confirmed");
 const entries = new EntryControls({connection,strategy,slippageBps:MAX_SLIPPAGE_BPS,priorityFee:PRIORITY_FEE_MICRO_LAMPORTS,address:currentWalletAddress,cancelApproval:()=>browserWallet.cancelApproval(),signer:(summary,signal)=>browserWallet.signer(summary,signal)});
 
+const candidateInbox = new CandidateInbox(kronos, strategy, () => !!currentWalletAddress());
+
 // Initialize wallet from private key
 let walletKeypair: Keypair | null = null;
 let walletAddress: string | null = null;
@@ -130,6 +133,7 @@ if (WALLET_MODE === "keypair" && WALLET_PRIVATE_KEY) {
 const TOOLS: Tool[] = [
   KRONOS_TOOL,
   KRONOS_EVALUATION_TOOL,
+  ...CANDIDATE_TOOLS,
   ...PROTECTION_TOOLS,
   ...ENTRY_TOOLS,
   { name: "get_strategy_plan", description: "Read the configured SOL intraday plan, risk cap, target split, and live-execution blockers. Does not place orders.", inputSchema: { type: "object", properties: {} } },
@@ -520,6 +524,18 @@ function createServer(): Server {
     const { name, arguments: args } = request.params;
 
     try {
+      if (name === "scan_trade_candidates") {
+        const result = await candidateInbox.scan(args, extra.signal);
+        return {content:[{type:"text",text:JSON.stringify(result)}]};
+      }
+      if (name === "check_candidate_outcome") {
+        const result = await candidateInbox.checkOutcome(extra.signal);
+        return {content:[{type:"text",text:JSON.stringify(result)}]};
+      }
+      if (name === "get_candidate_inbox") {
+        const result = await candidateInbox.latest();
+        return {content:[{type:"text",text:JSON.stringify(result)}]};
+      }
       if (name === "evaluate_kronos") {
         const result = await kronos.evaluate(args, extra.signal);
         return {content:[{type:"text",text:JSON.stringify(result)}]};
@@ -641,7 +657,7 @@ async function startHttpServer() {
     next();
   });
   app.use(express.json({ limit: "64kb" }));
-  if (WALLET_MODE === "browser") browserWallet.mount(app, MCP_PORT, entries, kronos);
+  if (WALLET_MODE === "browser") browserWallet.mount(app, MCP_PORT, entries, kronos, candidateInbox);
 
   // Health check endpoint
   app.get("/health", (req, res) => {
