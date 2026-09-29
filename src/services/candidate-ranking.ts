@@ -2,8 +2,8 @@ export const candidateIds = ["sol_long", "sol_short", "eth_watch", "btc_watch", 
 export type CandidateId = typeof candidateIds[number];
 
 export const candidateDefinitions = [
-  {id:"sol_long",asset:"SOL",side:"long",label:"SOL breakout and retest",execution_scope:"saved_SOL_plan",description:"Only after the saved 15-minute breakout, retest and structural stop are verified. The long conversion route is presently blocked."},
-  {id:"sol_short",asset:"SOL",side:"short",label:"SOL failed bounce",execution_scope:"saved_SOL_plan",description:"Only after a rejection, completed breakdown and failed rebound in the saved SOL plan."},
+  {id:"sol_long",asset:"SOL",side:"long",label:"SOL breakout and retest",execution_scope:"analysis_only",description:"Research the saved 15-minute breakout, retest and structural-stop conditions; this choice cannot start an entry review."},
+  {id:"sol_short",asset:"SOL",side:"short",label:"SOL failed bounce",execution_scope:"analysis_only",description:"Research the rejection, completed breakdown and failed rebound conditions; this choice cannot start an entry review."},
   {id:"eth_watch",asset:"ETH",side:null,label:"ETH market watch",execution_scope:"analysis_only",description:"Market analysis candidate; there is no configured ETH entry plan."},
   {id:"btc_watch",asset:"BTC",side:null,label:"BTC market watch",execution_scope:"analysis_only",description:"Market analysis candidate; there is no configured BTC entry plan."}
 ] as const;

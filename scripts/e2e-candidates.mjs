@@ -21,6 +21,9 @@ try{
  assert.equal((await fetch(base+'/wallet/candidates/latest')).status,401);
  const page=await fetch(base+'/wallet'),html=await page.text();
  assert.match(html,/id="candidate-scan"/);assert.match(html,/id="candidate-list"/);
+ assert.match(html,/<details class="research-panel">/);
+ const bundle=await (await fetch(base+'/wallet/app.js')).text();
+ assert(!bundle.includes('Review in entry controls'),'research UI has no entry-review action');
  assert.match(html,/id="candidate-history"/);
  assert.match(html,/id="candidate-key"[^>]*type="password"/);
  const cookie=page.headers.get('set-cookie').split(';')[0];
@@ -46,7 +49,7 @@ try{
  const outcome=await scanPromise;
  assert.equal(outcome.status,200,JSON.stringify(outcome.body)+'\n'+logs);
  const scan=outcome.body;
- assert.equal(scan.status,'review_candidates');
+ assert.equal(scan.status,'research_flagged');
  assert.equal(scan.decision.id,'sol_short');assert.equal(scan.decision.provider,'openrouter');
  assert.equal(scan.decision.model,'typesafe/jev-1.13-fixture');
  assert.equal(scan.ranked[0].id,'sol_short');
@@ -57,7 +60,7 @@ try{
  assert(scan.snapshot.lanes.every(l=>l.last_completed_time+({'15m':900000,'1h':3600000}[l.interval])<=Date.now()));
  assert(scan.snapshot.forecast?.forecast.length===8);
  assert(scan.snapshot.evaluation===null || Array.isArray(scan.snapshot.evaluation.holdout));
- assert.equal(scan.snapshot.candidates.find(c=>c.id==='eth_watch').execution_scope,'analysis_only');
+ assert(scan.snapshot.candidates.every(c=>c.execution_scope==='analysis_only'));
  assert.equal((await request('latest')).body.id,scan.id);
  const outcomeCheck=await request('outcome',{});
  assert.equal(outcomeCheck.body.status,'pending');

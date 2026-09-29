@@ -106,13 +106,13 @@ export class CandidateInbox {
           plan:{long:this.strategy.long,short:this.strategy.short},candidates:candidateDefinitions.map(c=>({id:c.id,description:c.description})),warnings};
         decision=await rankCandidateState(state,signal);
         ranked=candidateDefinitions.map(c=>({...c,selection_share:decision.probabilities[c.id]})).sort((a,b)=>b.selection_share-a.selection_share);
-        status=decision.id==="none" || decision.evidence_consistent<0.5 || decision.confidence<0.5?"watch":"review_candidates";
+        status=decision.id==="none" || decision.evidence_consistent<0.5 || decision.confidence<0.5?"watch":"research_flagged";
       }else if(!key)warnings.push("OpenRouter key is not configured; candidate states collected without model ranking");
       else warnings.push("Fresh completed SOL candles unavailable; Jev ranking skipped");
       signal.throwIfAborted();
       const scan={id:randomUUID(),created_at:Date.now(),snapshot_hash:createHash("sha256").update(JSON.stringify(snapshot)).digest("hex"),
         snapshot,decision,ranked,status,read_only:true,submitted:false,
-        limitation:"Jev's choice probabilities express routing preference, not profit odds. Ranking cannot bypass entry validation or wallet approval."};
+        limitation:"Jev's choice probabilities express research preference, not profit odds. Research scans have no connection to entry review, transaction preparation or wallet approval."};
       await mkdir(archiveRoot,{recursive:true});
       const archive=JSON.stringify({scan},null,2);
       await writeFile(new URL(scan.id+".json",archiveRoot),archive,{flag:"wx"});

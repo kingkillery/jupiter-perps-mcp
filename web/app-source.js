@@ -247,7 +247,7 @@ api('kronos/evaluation/latest').then(report=>{
 }).catch(e=>{$('kronos-eval-message').textContent=e.message;});
 
 
-let candidateController=null,candidateScan=null;
+let candidateController=null;
  $('candidate-key-form').onsubmit=async event=>{
   event.preventDefault();const form=event.currentTarget,field=$('candidate-key'),button=form.querySelector('button');
   button.disabled=true;$('candidate-key-message').textContent='Saving on this computer…';
@@ -261,11 +261,11 @@ function candidateControls(){
  $('candidate-cancel').hidden=!candidateController;
 }
 function showCandidate(scan){
- candidateScan=scan;$('candidate-result').hidden=false;
+ $('candidate-result').hidden=false;
  const choice=scan.decision?.id;
  $('candidate-summary').textContent=scan.status==='unconfigured'?'Snapshot collected. Configure the Jev gateway key to rank candidates.':
-  scan.status==='watch'?'Jev found no candidate ready for a review route.':
-  choice?'Jev selected '+scan.snapshot.candidates.find(c=>c.id===choice)?.label+' for deeper review.':'Candidate scan completed without a ranking.';
+  scan.status==='watch'?'Jev found no candidate to flag for further research.':
+  choice?'Jev flagged '+scan.snapshot.candidates.find(c=>c.id===choice)?.label+' for research.':'Candidate scan completed without a ranking.';
  $('candidate-meta').textContent='Collected '+candidateTime(scan.created_at)+' · Expires '+candidateTime(scan.snapshot.expires_at)+' · Snapshot '+scan.snapshot_hash.slice(0,12)+
   (scan.decision?' · '+scan.decision.model:'');
  $('candidate-outcome').textContent=scan.outcome?.status==='observed'?'Observed SOL move: '+scan.outcome.realized_change_pct.toFixed(2)+'% over eight candles.'+(scan.outcome.selected_direction_matched===null?'':' Selected direction '+(scan.outcome.selected_direction_matched?'matched.':'did not match.')):'Outcome pending until eight future SOL candles complete.';
@@ -274,20 +274,8 @@ function showCandidate(scan){
  for(const c of list){
   const card=document.createElement('article'),title=document.createElement('h3'),desc=document.createElement('p'),badge=document.createElement('span');
   title.textContent=c.label;desc.textContent=c.description;
-  badge.textContent=c.selection_share===undefined?'Unranked':(c.selection_share*100).toFixed(1)+'% review share';
+  badge.textContent=c.selection_share===undefined?'Unranked':(c.selection_share*100).toFixed(1)+'% research share';
   badge.className='tag';card.append(title,badge,desc);
-  if(c.id===choice&&scan.status==='review_candidates'&&c.execution_scope==='saved_SOL_plan'){
-   const button=document.createElement('button');button.type='button';button.textContent='Review in entry controls';
-   button.disabled=Date.now()>=scan.snapshot.expires_at;
-   button.onclick=()=>{
-    if(Date.now()>=scan.snapshot.expires_at){$('candidate-message').textContent='This scan expired. Scan again before reviewing.';return;}
-    $('entry-side').value=c.side;$('entry-side').dispatchEvent(new Event('input',{bubbles:true}));
-    $('entry-form').scrollIntoView({behavior:'smooth',block:'start'});
-    if(account)$('entry-form').requestSubmit();
-    else $('candidate-message').textContent='Connect Jupiter Wallet, then preview this selected SOL setup in Entry controls.';
-   };
-   card.append(button);
-  }
   $('candidate-list').append(card);
  }
  $('candidate-evidence').replaceChildren();
@@ -305,14 +293,14 @@ function showCandidate(scan){
   '. Warnings: '+(scan.snapshot.warnings.length?scan.snapshot.warnings.join('; '):'none')+
   '. Wallet: '+(scan.snapshot.wallet_connected?'connected at scan time':'not connected at scan time')+'.';
  $('candidate-evidence').append(more);
- $('candidate-message').textContent=scan.status==='review_candidates'?'Review the highlighted setup and run a fresh server preview.':
-  scan.status==='watch'?'Keep watching or examine the evidence. No candidate was sent to entry review.':'Snapshot saved locally; Jev ranking awaits its key.';
+ $('candidate-message').textContent=['research_flagged','review_candidates'].includes(scan.status)?'Research flag saved. Entry controls are independent of Jev.':
+  scan.status==='watch'?'Keep watching or examine the evidence. No setup was flagged.':'Snapshot saved locally; Jev ranking awaits its key.';
 }
 $('candidate-cancel').onclick=()=>{candidateController?.abort();$('candidate-message').textContent='Scan cancelled.';};
 $('candidate-outcome-button').onclick=async()=>{try{const result=await api('candidates/outcome',{});$('candidate-outcome').textContent=result.status==='observed'?'Observed SOL move: '+result.realized_change_pct.toFixed(2)+'% over eight candles.'+(result.selected_direction_matched===null?'':' Selected direction '+(result.selected_direction_matched?'matched.':'did not match.')):result.reason;}catch(e){$('candidate-outcome').textContent=e.message;}};
 $('candidate-scan').onclick=async()=>{
  if(candidateController)return;const controller=new AbortController();candidateController=controller;candidateControls();
- $('candidate-message').textContent='Collecting market evidence and asking Jev to rank review options…';
+ $('candidate-message').textContent='Collecting market evidence and asking Jev to rank research options…';
  try{
   const response=await fetch('/wallet/candidates/scan',{method:'POST',headers:{'Content-Type':'application/json','X-Wallet-Bridge':'1'},body:'{}',signal:controller.signal});
   const result=await response.json();if(!response.ok)throw new Error(result.error||'Candidate scan failed');
