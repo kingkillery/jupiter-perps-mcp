@@ -1,12 +1,24 @@
 // Read-only, fixed-session market metadata and timestamped quotes for the range replay.
 import {readFile,writeFile} from 'node:fs/promises';
 
-const root=new URL('../.runtime/kronos-market-ranges/',import.meta.url);
-const replay=JSON.parse(await readFile(new URL('latest.json',root),'utf8'));
-const origins=[...new Set(replay.rows.map(r=>r.origin_time))].sort((a,b)=>a-b);
-if(origins.length!==8||origins.some((t,i)=>t!==Date.parse(`2026-09-${String(i+7).padStart(2,'0')}T12:00:00Z`)))
-  throw new Error('Unexpected replay sessions');
-const byTime=new Map(replay.rows.filter(r=>r.interval==='15m').map(r=>[r.origin_time,r]));
+const fresh=process.argv.length===3&&process.argv[2]==='--new-period';
+if(process.argv.length>2&&!fresh)throw new Error('Unsupported arguments');
+const root=new URL(fresh?'../.runtime/sol-reference-data/':'../.runtime/kronos-market-ranges/',import.meta.url);
+const replay=fresh?null:JSON.parse(await readFile(new URL('latest.json',root),'utf8'));
+const origins=fresh?Array.from({length:14},(_,i)=>Date.parse(`2026-09-${String(i+15).padStart(2,'0')}T12:00:00Z`)):
+  [...new Set(replay.rows.map(r=>r.origin_time))].sort((a,b)=>a-b);
+if(origins.length!==(fresh?14:8)||origins.some((t,i)=>t!==Date.parse(`2026-09-${String(i+(fresh?15:7)).padStart(2,'0')}T12:00:00Z`)))
+  throw new Error('Unexpected sessions');
+const byTime=fresh?new Map():new Map(replay.rows.filter(r=>r.interval==='15m').map(r=>[r.origin_time,r]));
+if(fresh){
+  const archive=JSON.parse(await readFile(new URL('coinbase-solusd-1m-new.json',root),'utf8'));
+  const indexed=new Map(archive.bars.map(b=>[b.time,b]));
+  for(const origin of origins){
+    const prior=indexed.get(origin-60_000);
+    if(!prior)throw new Error('Missing completed Coinbase minute before session');
+    byTime.set(origin,{context_close:prior.close});
+  }
+}
 
 async function get(url){
   for(let attempt=0;attempt<4;attempt++){
@@ -95,8 +107,9 @@ async function kalshi(origin,interval){
 }
 
 const rows=[];
+const outputName=fresh?'markets-new.json':'markets.json';
 let prior=[];
-try{prior=JSON.parse(await readFile(new URL('markets.json',root),'utf8')).rows;}catch(error){if(error.code!=='ENOENT')throw error;}
+try{prior=JSON.parse(await readFile(new URL(outputName,root),'utf8')).rows;}catch(error){if(error.code!=='ENOENT')throw error;}
 for(const origin of origins){
   for(const interval of ['15m','1h']){
     const cached=prior.find(r=>r.origin_time===origin&&r.interval===interval);
@@ -111,11 +124,13 @@ for(const origin of origins){
   console.log(`Read prediction markets for ${new Date(origin).toISOString()}`);
 }
 const output={retrieved_at:new Date().toISOString(),research_only:true,
-  session_rule:'Sep 7-14 2026 at 12:00 UTC each day; one 15m and one 1h market',
+  sealed_for_future_scoring:fresh,
+  session_rule:fresh?'Sep 15-28 2026 at 12:00 UTC each day; one 15m and one 1h market':
+    'Sep 7-14 2026 at 12:00 UTC each day; one 15m and one 1h market',
   limitations:['Polymarket quote is last sampled price at/before session start, not an executable order-book snapshot.',
     'Kalshi first-minute quote sees up to one minute of the outcome window; it is not time-matched to model issuance.',
     'Settlement sources differ from Coinbase spot, and up/down or threshold payouts are not candle high/low events.'],rows};
-await writeFile(new URL('markets.json',root),JSON.stringify(output,null,2));
+await writeFile(new URL(outputName,root),JSON.stringify(output,null,2));
 console.log(JSON.stringify({rows:rows.length,polymarket_quotes:rows.filter(r=>r.polymarket.quote_before_start).length,
   kalshi_quotes:rows.filter(r=>r.kalshi.quote_first_minute).length,
   errors:rows.filter(r=>r.polymarket.error||r.kalshi.error).map(r=>({date:new Date(r.origin_time).toISOString(),interval:r.interval,polymarket:r.polymarket.error,kalshi:r.kalshi.error}))},null,2));
